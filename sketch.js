@@ -14,6 +14,18 @@ const BOX_PENALTY = 0.5;
 const BOX_INTERVAL_MS = 3000;
 const MAX_BOX_COUNT = 8;
 
+// 둘러보기(아파트뷰) 연출
+const LOOK_BTN_BOX_MIN = 4;        // 박스 N개 이상이면 둘러보기 버튼 등장
+const LOOK_NEAR_BED = 1 / 3;       // 또는 캐릭터가 화면 왼쪽 1/3(침대 근처) 도달 시
+const LOOK_MSG_MS = 3000;          // 아파트뷰 중앙 문구 노출 시간
+const LOOK_BOX_RELIEF = 0.2;       // 되돌아온 뒤 남는 박스 비율 (80% 덜어냄)
+const APARTMENT_ROOMS = 6;         // 아파트뷰에 보일 방 개수 (플레이어 방 포함)
+const LOOK_MESSAGES = [
+  '다들 비슷하구나.\n나도 힘내야지. 재도전!',
+  '괜찮아. 잠시 쉴수도 있지.\n다시 해보자.',
+  '내가 침대로 갔던건 추진력을\n얻기 위함 이었다.',
+];
+
 // --- 상태 ---
 let phase = 'countdown';
 let loseReason = null;
@@ -24,6 +36,12 @@ let lastBoxDrop = 0;
 let boxFlashAt = -9999;
 let heldRest = false;
 let endShownAt = 0;
+
+// 둘러보기 상태
+let usedLookAround = false;        // 둘러보기 사용 여부 (본편 클리어 엔딩 분기용)
+let lookStart = 0;                 // 둘러보기 진입 시각
+let lookMsg = '';                  // 이번 둘러보기에서 띄울 문구
+let apartmentRooms = [];           // 아파트뷰 각 방 구성
 
 function setup() {
   recomputeLayout();
@@ -69,17 +87,30 @@ function resetGame() {
   lastBoxDrop = 0;
   boxFlashAt = -9999;
   heldRest = false;
+  usedLookAround = false;
+  lookStart = 0;
+  lookMsg = '';
+  apartmentRooms = [];
 }
 
 function draw() {
   if (phase === 'countdown') stepCountdown();
   else if (phase === 'playing') stepPlaying();
+  // 'lookaround'에는 step 함수가 없다 → 자동 드리프트·박스 누적이 멈춘다(연출 중 게임 일시정지)
 
-  drawScene();
-  drawHUD();
+  if (phase === 'lookaround') {
+    drawApartment();
+  } else {
+    drawScene();
+    drawHUD();
+  }
 
   if (phase === 'countdown') drawCountdownOverlay();
-  if (phase === 'playing') drawButtons();
+  if (phase === 'playing') {
+    drawButtons();
+    drawLookBtn();
+  }
+  if (phase === 'lookaround') drawLookaroundOverlay();
   if (phase === 'win' || phase === 'lose') drawEndCard();
 }
 
@@ -358,7 +389,17 @@ function handlePress(mx, my) {
     if (millis() - endShownAt > 800) resetGame();
     return;
   }
-  if (inRect(mx, my, forwardBtn())) {
+  if (phase === 'lookaround') {
+    // 문구 노출(3초)이 끝난 뒤에만 되돌아가기 가능
+    if (millis() - lookStart > LOOK_MSG_MS && inRect(mx, my, backBtn())) {
+      returnFromLookaround();
+    }
+    return;
+  }
+  // playing
+  if (lookBtnVisible() && inRect(mx, my, lookBtn())) {
+    enterLookaround();
+  } else if (inRect(mx, my, forwardBtn())) {
     playerX += FORWARD_PER_TAP / (1 + boxCount * BOX_PENALTY);
   } else if (inRect(mx, my, restBtn())) {
     heldRest = true;
@@ -377,3 +418,226 @@ function touchStarted() {
   return false;
 }
 function touchEnded() { handleRelease(); return false; }
+
+// ---------- 둘러보기 (아파트뷰 연출) ----------
+function lookBtnVisible() {
+  return boxCount >= LOOK_BTN_BOX_MIN || playerX <= LOOK_NEAR_BED;
+}
+
+function lookBtn() {
+  const w = W * 0.52;
+  const h = 36 * S;
+  return { x: W / 2 - w / 2, y: ROOM_TOP + 6 * S, w, h };
+}
+
+function backBtn() {
+  const w = W * 0.6;
+  const h = 54 * S;
+  return { x: W / 2 - w / 2, y: H - 84 * S, w, h };
+}
+
+function drawLookBtn() {
+  if (!lookBtnVisible()) return;
+  const r = lookBtn();
+  const pulse = 0.5 + 0.5 * sin(millis() / 300);
+  noStroke();
+  fill(15, 60, 50, 200);
+  rect(r.x + 2 * S, r.y + 3 * S, r.w, r.h, r.h / 2);
+  fill(70 + pulse * 45, 200, 160);
+  rect(r.x, r.y, r.w, r.h, r.h / 2);
+  fill(8, 40, 30);
+  textSize(15 * S);
+  textAlign(CENTER, CENTER);
+  text('주변 둘러보기', r.x + r.w / 2, r.y + r.h / 2);
+}
+
+function enterLookaround() {
+  phase = 'lookaround';
+  lookStart = millis();
+  usedLookAround = true;   // 본편: 클리어 시 '둘러보기 후 클리어' 엔딩 분기에 사용
+  heldRest = false;
+  lookMsg = random(LOOK_MESSAGES);
+  buildApartment();
+}
+
+function returnFromLookaround() {
+  boxCount = Math.round(boxCount * LOOK_BOX_RELIEF);  // 박스 80% 덜어냄
+  lastBoxDrop = millis();                             // 박스 타이머 리셋 (즉시 드랍 방지)
+  phase = 'playing';
+}
+
+// 아파트뷰에 보일 방들을 구성 (0번 = 플레이어 본인 방)
+function buildApartment() {
+  apartmentRooms = [];
+  apartmentRooms.push({
+    isPlayer: true,
+    prog: constrain(playerX, 0.08, 0.92),
+    boxes: boxCount,
+    skin: color(245, 220, 200),
+    shirt: color(80, 90, 130),
+    hair: color(40, 30, 35),
+  });
+
+  const skins = [
+    color(245, 220, 200), color(225, 195, 170), color(208, 168, 138),
+    color(190, 150, 120), color(250, 228, 208),
+  ];
+  const shirts = [
+    color(150, 90, 90), color(90, 140, 110), color(120, 110, 165),
+    color(170, 150, 80), color(95, 120, 150), color(165, 110, 140),
+  ];
+  const hairs = [
+    color(40, 30, 35), color(62, 45, 30), color(28, 28, 40),
+    color(72, 60, 55), color(20, 20, 25),
+  ];
+
+  for (let i = 1; i < APARTMENT_ROOMS; i++) {
+    apartmentRooms.push({
+      isPlayer: false,
+      prog: random(0.12, 0.9),
+      boxes: Math.floor(random(0, 7)),
+      skin: random(skins),
+      shirt: random(shirts),
+      hair: random(hairs),
+    });
+  }
+}
+
+function drawApartment() {
+  // 건물 외벽 배경
+  background(18, 16, 30);
+  noStroke();
+  fill(34, 30, 52);
+  rect(0, 0, W, H);
+
+  const topPad = 52 * S;
+  const botPad = 96 * S;
+
+  // 타이틀
+  fill(200, 220, 235, 230);
+  textSize(15 * S);
+  textAlign(CENTER, CENTER);
+  text('아파트 — 다들 각자의 방에서', W / 2, topPad / 2);
+
+  // 6개 방 그리드 (2열 x 3행)
+  const cols = 2;
+  const rows = Math.ceil(APARTMENT_ROOMS / cols);
+  const outer = 14 * S;
+  const gap = 10 * S;
+  const gridW = W - outer * 2;
+  const gridH = H - topPad - botPad;
+  const cw = (gridW - gap * (cols - 1)) / cols;
+  const ch = (gridH - gap * (rows - 1)) / rows;
+
+  for (let i = 0; i < apartmentRooms.length; i++) {
+    const c = i % cols;
+    const r = Math.floor(i / cols);
+    const x = outer + c * (cw + gap);
+    const y = topPad + r * (ch + gap);
+    drawMiniRoom(x, y, cw, ch, apartmentRooms[i]);
+  }
+}
+
+function drawMiniRoom(x, y, w, h, room) {
+  // 창틀 (플레이어 방은 강조)
+  noStroke();
+  fill(room.isPlayer ? color(120, 220, 180) : color(58, 52, 78));
+  rect(x - 2 * S, y - 2 * S, w + 4 * S, h + 4 * S, 4 * S);
+
+  // 방 배경 (진행도에 따라 약간 밝게)
+  const bg = lerpColor(color(20, 16, 34), color(72, 58, 100), room.prog);
+  fill(bg);
+  rect(x, y, w, h, 3 * S);
+
+  // 바닥
+  const floorY = y + h * 0.82;
+  fill(red(bg) * 0.7 + 18, green(bg) * 0.7 + 14, blue(bg) * 0.7 + 28);
+  rect(x, floorY, w, y + h - floorY);
+
+  // 침대 (왼쪽)
+  fill(120, 70, 85);
+  rect(x + 5 * S, floorY - h * 0.13, w * 0.22, h * 0.13, 2 * S);
+
+  // 문 (오른쪽)
+  fill(140, 240, 200, 210);
+  rect(x + w - 7 * S, y + h * 0.22, 3 * S, floorY - (y + h * 0.22));
+
+  // 캐릭터 + 박스
+  const chX = lerp(x + w * 0.24, x + w * 0.78, room.prog);
+  drawMiniBoxes(chX, floorY, h, room.boxes);
+  drawMiniChar(chX, floorY, h, room);
+
+  // "나" 라벨
+  if (room.isPlayer) {
+    fill(150, 245, 200);
+    textSize(11 * S);
+    textAlign(LEFT, TOP);
+    text('나', x + 5 * S, y + 4 * S);
+  }
+}
+
+function drawMiniChar(cx, baseY, h, room) {
+  const u = h * 0.011;
+  noStroke();
+  // 다리
+  fill(40, 35, 60);
+  rect(cx - 3 * u, baseY - 4 * u, 3 * u, 4 * u);
+  rect(cx + 1 * u, baseY - 4 * u, 3 * u, 4 * u);
+  // 몸통
+  fill(room.shirt);
+  rect(cx - 4 * u, baseY - 14 * u, 9 * u, 11 * u, 1 * u);
+  // 머리
+  fill(room.skin);
+  rect(cx - 3 * u, baseY - 22 * u, 7 * u, 8 * u, 1 * u);
+  // 머리카락
+  fill(room.hair);
+  rect(cx - 3 * u, baseY - 22 * u, 7 * u, 3 * u, 1 * u);
+}
+
+function drawMiniBoxes(cx, baseY, h, count) {
+  if (count <= 0) return;
+  const u = h * 0.011;
+  const shown = Math.min(count, 8);
+  for (let i = 0; i < shown; i++) {
+    const bx = cx - 8 * u;
+    const by = baseY - 17 * u - i * 4 * u;
+    fill(200, 140, 80);
+    rect(bx, by, 8 * u, 4 * u);
+    fill(140, 80, 35);
+    rect(bx, by + 1.6 * u, 8 * u, 0.7 * u);
+  }
+}
+
+function drawLookaroundOverlay() {
+  const elapsed = millis() - lookStart;
+
+  if (elapsed < LOOK_MSG_MS) {
+    // 중앙 문구 (페이드 인/아웃)
+    const t = elapsed / LOOK_MSG_MS;
+    let a = 255;
+    if (t < 0.12) a = map(t, 0, 0.12, 0, 255);
+    else if (t > 0.85) a = map(t, 0.85, 1, 255, 130);
+    noStroke();
+    fill(0, 150 * (a / 255));
+    rect(0, H / 2 - 60 * S, W, 120 * S);
+    fill(255, 255, 255, a);
+    textSize(18 * S);
+    textLeading(26 * S);
+    textAlign(CENTER, CENTER);
+    text(lookMsg, W / 2, H / 2);
+  } else {
+    // 되돌아가기 버튼
+    const r = backBtn();
+    noStroke();
+    fill(18, 55, 42);
+    rect(r.x + 3 * S, r.y + 4 * S, r.w, r.h, 10 * S);
+    fill(90, 200, 150);
+    rect(r.x, r.y, r.w, r.h, 10 * S);
+    fill(255, 130 + sin(millis() / 300) * 30);
+    rect(r.x + 6 * S, r.y + 6 * S, r.w - 12 * S, 5 * S, 4 * S);
+    fill(255);
+    textSize(18 * S);
+    textAlign(CENTER, CENTER);
+    text('↩ 되돌아가기', r.x + r.w / 2, r.y + r.h / 2);
+  }
+}
