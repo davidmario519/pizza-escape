@@ -1,11 +1,19 @@
 // Escape Room — Stage 1 MVP
 // 혼자만의 고독한 사투
 
-// --- 적응형 캔버스 ---
-let W, H, S;                            // W/H = 캔버스 픽셀, S = 아트 스케일 (W/360 기준)
-let ROOM_TOP, ROOM_BOTTOM, BTN_AREA_TOP;
+// --- 적응형 캔버스 (가로 모드) ---
+let W, H, S;                            // W/H = 캔버스 픽셀, S = 아트 스케일 (가로 640x360 기준)
+let ROOM_TOP, ROOM_BOTTOM;
 let PLAYER_RANGE_LEFT, PLAYER_RANGE_RIGHT;
-const DESKTOP_MAX_W = 500;              // 데스크탑에서 너비 제한 (모바일에서는 자동으로 풀폭)
+let PANEL_LEFT, PANEL_W;                // 우측 컨트롤 패널 (앞으로/쉬기 버튼)
+const DESIGN_W = 640, DESIGN_H = 360;   // 가로 디자인 기준 해상도 (16:9)
+
+// --- 폰트 (KBL Jump 패밀리) ---
+// preload()에서 로드. 사용: textFont(FONTS.kblExtended) 등.
+let FONTS = {};
+
+// --- 이미지 에셋 --- (preload()에서 로드. 사용: image(IMAGES.logo, ...))
+let IMAGES = {};
 
 // --- 밸런스 수치 ---
 const AUTO_DRIFT_PER_SEC = 0.025;
@@ -16,7 +24,7 @@ const MAX_BOX_COUNT = 8;
 
 // 둘러보기(아파트뷰) 연출
 const LOOK_BTN_BOX_MIN = 4;        // 박스 N개 이상이면 둘러보기 버튼 등장
-const LOOK_NEAR_BED = 1 / 3;       // 또는 캐릭터가 화면 왼쪽 1/3(침대 근처) 도달 시
+const LOOK_NEAR_BED = 2 / 5;       // 또는 캐릭터가 화면 왼쪽 1/3(침대 근처) 도달 시
 const LOOK_MSG_MS = 3000;          // 아파트뷰 중앙 문구 노출 시간
 const LOOK_BOX_RELIEF = 0.2;       // 되돌아온 뒤 남는 박스 비율 (80% 덜어냄)
 const APARTMENT_ROOMS = 6;         // 아파트뷰에 보일 방 개수 (플레이어 방 포함)
@@ -36,12 +44,32 @@ let lastBoxDrop = 0;
 let boxFlashAt = -9999;
 let heldRest = false;
 let endShownAt = 0;
+let titleSlide = 0;                 // 오프닝 슬라이드 (0=히어로,1=랜딩,2~4=How to Play)
 
 // 둘러보기 상태
 let usedLookAround = false;        // 둘러보기 사용 여부 (본편 클리어 엔딩 분기용)
 let lookStart = 0;                 // 둘러보기 진입 시각
 let lookMsg = '';                  // 이번 둘러보기에서 띄울 문구
 let apartmentRooms = [];           // 아파트뷰 각 방 구성
+
+// p5가 setup 전에 호출 — 폰트를 먼저 로드한다.
+// ⚠ loadFont는 fetch 기반이라 file://로 열면 차단됨 → http로 서빙 필요
+//   (python3 -m http.server 8000). woff2는 미지원이라 TTF로 로드.
+function preload() {
+  FONTS = {
+    kbl:          loadFont('src/폰트/KBLJump/KBLJump_R.ttf'),            // Regular
+    kblBold:      loadFont('src/폰트/KBLJump/KBLJump_B.ttf'),            // Bold
+    kblExtended:  loadFont('src/폰트/KBLJump/KBLJump_EB_Extended.ttf'),  // ExtraBold 확장 (HOW TO PLAY)
+    kblCondensed: loadFont('src/폰트/KBLJump/KBLJump_EB_Condensed.ttf'), // ExtraBold 압축
+    kblCourt:     loadFont('src/폰트/KBLJump/KBLCourt_EB.ttf'),          // Court ExtraBold
+    // 오프닝 디자인(피그마)용
+    macho:        loadFont('src/폰트/EF_MACHO/EF_MACHO(ttf).ttf'),       // 한글 제목·라벨·버튼
+    galmuri:      loadFont('src/폰트/Galmuri-v2/Galmuri11.ttf'),         // 본문 설명 (픽셀, ~5MB)
+  };
+  IMAGES = {
+    logo: loadImage('src/화면 UI/로고.png'),   // 히어로 메인 로고 (피자박스 + 워드마크)
+  };
+}
 
 function setup() {
   recomputeLayout();
@@ -50,6 +78,7 @@ function setup() {
   smooth();
   textAlign(CENTER, CENTER);
   resetGame();
+  phase = 'title';   // 첫 진입은 오프닝 로고 (재도전은 곧장 카운트다운)
 }
 
 function windowResized() {
@@ -57,25 +86,24 @@ function windowResized() {
   resizeCanvas(W, H);
 }
 
-// 뷰포트 크기로부터 레이아웃 좌표·스케일을 재계산
+// 뷰포트 크기로부터 레이아웃 좌표·스케일을 재계산 (가로 모드 기준)
 function recomputeLayout() {
-  W = Math.min(window.innerWidth, DESKTOP_MAX_W);
+  W = window.innerWidth;
   H = window.innerHeight;
-  S = W / 360;
+  // 가로/세로 중 더 빡빡한 쪽에 맞춰 아트가 화면을 넘지 않게
+  S = Math.min(W / DESIGN_W, H / DESIGN_H);
 
-  // 하단 버튼 영역
-  const btnAreaH = Math.min(170 * S, H * 0.30);
-  const bottomMargin = 16 * S;
-  BTN_AREA_TOP = H - btnAreaH - bottomMargin;
+  // 우측 컨트롤 패널 (앞으로/쉬기)
+  PANEL_W = Math.max(W * 0.24, 130 * S);
+  PANEL_LEFT = W - PANEL_W;
 
-  // 방 영역
-  const roomGap = 16 * S;
-  ROOM_BOTTOM = BTN_AREA_TOP - roomGap;
-  ROOM_TOP = Math.max(50 * S, H * 0.08);
+  // 방(플레이) 영역 = 좌측
+  ROOM_TOP = Math.max(40 * S, H * 0.10);
+  ROOM_BOTTOM = H - Math.max(34 * S, H * 0.10);
 
-  // 플레이어 가로 범위
-  PLAYER_RANGE_LEFT = W * 0.22;
-  PLAYER_RANGE_RIGHT = W * 0.84;
+  // 플레이어 가로 범위 (좌=침대 ~ 우=문, 패널 침범 금지)
+  PLAYER_RANGE_LEFT = W * 0.07;
+  PLAYER_RANGE_RIGHT = PANEL_LEFT - W * 0.08;
 }
 
 function resetGame() {
@@ -91,9 +119,22 @@ function resetGame() {
   lookStart = 0;
   lookMsg = '';
   apartmentRooms = [];
+  titleSlide = 0;
+}
+
+// 오프닝 → 게임 시작 (카운트다운 진입)
+function startGame() {
+  phase = 'countdown';
+  countdownStart = millis();
+  textFont('sans-serif');  // 오프닝에서 바꾼 폰트 원복 (게임 텍스트는 기본 폰트 유지)
 }
 
 function draw() {
+  // 오프닝 로고 — 세로면 로고가 옆으로 눕혀져 회전을 유도
+  if (phase === 'title') { drawTitleScreen(); return; }
+  // 그 외 페이즈에서 세로로 들면 게임을 멈추고 회전 안내 (가로 고정)
+  if (isPortrait()) { drawRotateHint(); return; }
+
   if (phase === 'countdown') stepCountdown();
   else if (phase === 'playing') stepPlaying();
   // 'lookaround'에는 step 함수가 없다 → 자동 드리프트·박스 누적이 멈춘다(연출 중 게임 일시정지)
@@ -112,6 +153,11 @@ function draw() {
   }
   if (phase === 'lookaround') drawLookaroundOverlay();
   if (phase === 'win' || phase === 'lose') drawEndCard();
+}
+
+// 세로/가로 판별 (orientation 변경 즉시 반영되도록 window 값 직접 사용)
+function isPortrait() {
+  return window.innerHeight > window.innerWidth;
 }
 
 // ---------- step ----------
@@ -169,7 +215,7 @@ function drawScene() {
   drawTrash(95 * S, ROOM_BOTTOM - 22 * S);
   drawTrash(130 * S, ROOM_BOTTOM - 18 * S);
 
-  drawDoor(W - 28 * S, ROOM_TOP + 20 * S, ROOM_BOTTOM - 30 * S);
+  drawDoor(PLAYER_RANGE_RIGHT + W * 0.04, ROOM_TOP + 20 * S, ROOM_BOTTOM - 30 * S);
 
   const px = lerp(PLAYER_RANGE_LEFT, PLAYER_RANGE_RIGHT, playerX);
   const py = ROOM_BOTTOM - 30 * S;
@@ -274,6 +320,189 @@ function drawCountdownOverlay() {
   text(label, W / 2, H / 2);
 }
 
+// ---------- 오프닝 (히어로 + 피그마 opening 4슬라이드 = 총 5) ----------
+// 디자인 기준 프레임 2614x1206(네이비). 색/폰트는 피그마 스펙을 따른다.
+const OPEN_BG = [4, 33, 108];      // #04216c
+const OPEN_DW = 2614, OPEN_DH = 1206;
+const TITLE_SLIDES = 5;            // 0=히어로,1=랜딩,2=HTP,3=HTP+표,4=+시작버튼
+
+// 캔버스 안에 디자인 프레임을 비율 유지로 맞춰 넣은 박스(스케일+오프셋)
+function openingBox() {
+  const sc = Math.min(W / OPEN_DW, H / OPEN_DH);
+  const bw = OPEN_DW * sc, bh = OPEN_DH * sc;
+  return { sc, bw, bh, ox: (W - bw) / 2, oy: (H - bh) / 2 };
+}
+
+function drawTitleScreen() {
+  if (isPortrait()) { drawRotateHint(); return; }  // 가로로 돌리도록 유도
+  background(OPEN_BG[0], OPEN_BG[1], OPEN_BG[2]);
+  if (titleSlide === 0) drawSlideHero();
+  else if (titleSlide === 1) drawSlideLanding();
+  else if (titleSlide === 2) drawSlideHowToTitle();  // 중앙 큰 HOW TO PLAY
+  else drawSlideHowTo(titleSlide - 1);               // 3→표, 4→표+시작버튼
+  drawSlideHint();
+}
+
+// 슬라이드 0 — 히어로샷 (네이비 배경 + 로고.png 락업)
+function drawSlideHero() {
+  const b = openingBox();
+  const img = IMAGES.logo;
+  if (!img) return;
+  const ar = img.width / img.height;
+  let h = b.bh * 0.80;
+  let w = h * ar;
+  const maxW = b.bw * 0.6;
+  if (w > maxW) { w = maxW; h = w / ar; }
+  imageMode(CENTER);
+  image(img, W / 2, b.oy + b.bh * 0.47, w, h);
+  imageMode(CORNER);
+}
+
+// 글자 단위로 자간(tracking)을 줘서 그린다 (canvas letterSpacing 미지원 대비)
+function textTracked(str, x, y, spacing, align) {
+  const chars = [...str];
+  let total = 0;
+  for (const ch of chars) total += textWidth(ch) + spacing;
+  total -= spacing;
+  push();
+  textAlign(LEFT, CENTER);
+  let cx = (align === CENTER) ? x - total / 2 : x;
+  for (const ch of chars) {
+    text(ch, cx, y);
+    cx += textWidth(ch) + spacing;
+  }
+  pop();
+}
+
+// 슬라이드 1 — 중앙 "HOW TO PLAY"
+function drawSlideHowToTitle() {
+  const b = openingBox();
+  noStroke();
+  fill(255);
+  textFont(FONTS.kblExtended);
+  const fs = 0.085 * b.bh;
+  textSize(fs);
+  textTracked('HOW TO PLAY', W / 2, b.oy + b.bh * 0.5, fs * 0.16, CENTER);
+}
+
+// 슬라이드 0 — "고립은둔에서 / 벗어나고 싶은 당신. / 방에서 탈출하세요!"
+function drawSlideLanding() {
+  const b = openingBox();
+  noStroke();
+  fill(255);
+  textFont(FONTS.macho);
+  textAlign(CENTER, CENTER);
+  textSize(0.08 * b.bh);
+  const cx = W / 2;
+  const cy = b.oy + b.bh * 0.5;
+  const lh = 0.08 * b.bh * 1.18;
+  text('고립은둔에서', cx, cy - lh);
+  text('벗어나고 싶은 당신.', cx, cy);
+  text('방에서 탈출하세요!', cx, cy + lh);
+}
+
+// 슬라이드 1~3 — HOW TO PLAY (+조작표 +시작버튼)
+function drawSlideHowTo(stage) {
+  const b = openingBox();
+  const X = f => b.ox + f * b.bw;
+  const Y = f => b.oy + f * b.bh;
+  noStroke();
+
+  // HOW TO PLAY (좌상단, KBL Jump EB Extended, 넓은 자간)
+  fill(255);
+  textFont(FONTS.kblExtended);
+  const htpFs = 0.055 * b.bh;
+  textSize(htpFs);
+  textTracked('HOW TO PLAY', X(0.085), Y(0.16), htpFs * 0.16, LEFT);
+
+  if (stage >= 2) {
+    // 둥근 테두리 박스
+    push();
+    noFill();
+    stroke(255);
+    strokeWeight(Math.max(2, 6 * b.sc));
+    rect(X(0.068), Y(0.25), 0.864 * b.bw, 0.583 * b.bh, 30 * b.sc);
+    pop();
+
+    // 조작표 (라벨 = EF_MACHO, 설명 = Galmuri11)
+    const rows = [
+      ['앞으로',    '오른쪽(문)으로 전진합니다.'],
+      ['잠시 쉬기',  '제자리에 멈추지만, 지게 위에 박스가 추가됩니다.'],
+      ['방치 시',   '자동으로 왼쪽(침대)으로 끌려갑니다.'],
+      ['페널티',    '3초마다 박스가 누적되어 전진 속도가 느려집니다.'],
+    ];
+    for (let r = 0; r < rows.length; r++) {
+      const yy = Y(0.25 + 0.583 * (r + 0.5) / rows.length);
+      noStroke();
+      fill(255);
+      textAlign(LEFT, CENTER);
+      textFont(FONTS.macho);
+      textSize(0.066 * b.bh);
+      text(rows[r][0], X(0.15), yy);
+      textFont(FONTS.galmuri);
+      textSize(0.05 * b.bh);
+      text(rows[r][1], X(0.31), yy);
+    }
+  }
+
+  if (stage >= 3) {
+    // ▶ 게임 시작하기 (우하단)
+    noStroke();
+    fill(255);
+    textFont(FONTS.macho);
+    textAlign(RIGHT, CENTER);
+    const fs = 0.055 * b.bh;
+    textSize(fs);
+    const by = Y(0.92);
+    const bx = X(0.932);
+    text('게임 시작하기', bx, by);
+    const tw = textWidth('게임 시작하기');
+    const tr = fs * 0.42;                 // 삼각형 크기
+    const tx = bx - tw - tr * 2.2;
+    triangle(tx, by - tr, tx, by + tr, tx + tr * 1.2, by);
+  }
+}
+
+// 슬라이드 진행 힌트 (마지막 슬라이드는 버튼이 CTA라 생략)
+function drawSlideHint() {
+  const b = openingBox();
+  noStroke();
+  // 페이지 점
+  const n = TITLE_SLIDES, gap = 26 * b.sc, r = 5 * b.sc;
+  const startX = W / 2 - (n - 1) * gap / 2;
+  const yy = b.oy + b.bh - 34 * b.sc;
+  for (let d = 0; d < n; d++) {
+    fill(255, d === titleSlide ? 235 : 70);
+    circle(startX + d * gap, yy, r * 2);
+  }
+  if (titleSlide < TITLE_SLIDES - 1) {
+    const a = 120 + sin(millis() / 400) * 90;
+    fill(255, a);
+    textFont(FONTS.galmuri);
+    textAlign(CENTER, CENTER);
+    textSize(0.026 * b.bh);
+    text('탭하여 계속  ▶', W / 2, yy - 30 * b.sc);
+  }
+}
+
+// 세로로 들었을 때 게임을 멈추고 가로 회전 안내 (오프닝 회전 유도 겸용)
+function drawRotateHint() {
+  background(OPEN_BG[0], OPEN_BG[1], OPEN_BG[2]);
+  const k = Math.min(window.innerWidth, window.innerHeight) / 360;
+  push();
+  translate(W / 2, H / 2);
+  rotate(HALF_PI);
+  textAlign(CENTER, CENTER);
+  noStroke();
+  fill(255);
+  textSize(46 * k);
+  text('↻', 0, -50 * k);
+  textFont(FONTS.macho);
+  textSize(20 * k);
+  text('화면을 가로로 돌려주세요', 0, 10 * k);
+  pop();
+}
+
 // ---------- HUD ----------
 function drawHUD() {
   textSize(12 * S);
@@ -281,27 +510,28 @@ function drawHUD() {
   textAlign(LEFT, TOP);
   text('[ROOM_01]', 10 * S, 12 * S);
   textAlign(RIGHT, TOP);
-  text('지게 무게: ' + boxCount, W - 10 * S, 12 * S);
+  text('지게 무게: ' + boxCount, PANEL_LEFT - 10 * S, 12 * S);
   textAlign(CENTER, CENTER);
 }
 
-// ---------- buttons ----------
+// ---------- buttons (우측 세로 패널) ----------
 function forwardBtn() {
-  const btnH = Math.min(140 * S, H * 0.22);
+  // 앞으로 = 오른쪽(=문 방향)으로 직관 매핑, 엄지가 닿는 패널 하단의 큰 버튼
+  const m = PANEL_W * 0.12;
   return {
-    x: W * 0.28,
-    y: BTN_AREA_TOP + 10 * S,
-    w: W * 0.66,
-    h: btnH,
+    x: PANEL_LEFT + m,
+    y: H * 0.30,
+    w: PANEL_W - m * 2,
+    h: H * 0.42,
   };
 }
 function restBtn() {
-  const btnH = Math.min(70 * S, H * 0.11);
+  const m = PANEL_W * 0.12;
   return {
-    x: W * 0.04,
-    y: BTN_AREA_TOP + 40 * S,
-    w: W * 0.22,
-    h: btnH,
+    x: PANEL_LEFT + m,
+    y: H * 0.06,
+    w: PANEL_W - m * 2,
+    h: H * 0.18,
   };
 }
 function inRect(mx, my, r) {
@@ -309,41 +539,49 @@ function inRect(mx, my, r) {
 }
 
 function drawButtons() {
+  // 우측 컨트롤 패널 배경
+  noStroke();
+  fill(16, 13, 26);
+  rect(PANEL_LEFT, 0, PANEL_W, H);
+  fill(44, 38, 60);
+  rect(PANEL_LEFT, 0, 3 * S, H);
+
   const fwd = forwardBtn();
   const rest = restBtn();
+  textAlign(CENTER, CENTER);
 
-  // [앞으로 가기]
-  noStroke();
-  fill(40, 10, 15);
-  rect(fwd.x + 3 * S, fwd.y + 5 * S, fwd.w, fwd.h, 10 * S);
-  fill(220, 60, 70);
-  rect(fwd.x, fwd.y, fwd.w, fwd.h, 10 * S);
-  fill(255, 120, 130);
-  rect(fwd.x + 6 * S, fwd.y + 6 * S, fwd.w - 12 * S, 6 * S, 6 * S);
-  fill(255);
-  textSize(22 * S);
-  text('▶ 앞으로 가기', fwd.x + fwd.w / 2, fwd.y + fwd.h / 2);
-
-  // [잠시 쉬기] — 피자박스가 쌓인 모양
-  fill(30, 25, 30);
+  // [잠시 쉬기] — 피자박스가 쌓인 모양 (패널 위쪽, 작게)
+  fill(28, 24, 30);
   rect(rest.x + 3 * S, rest.y + 5 * S, rest.w, rest.h, 8 * S);
-  fill(heldRest ? 180 : 130, heldRest ? 150 : 125, heldRest ? 130 : 130);
+  fill(heldRest ? 180 : 130, heldRest ? 150 : 125, 130);
   rect(rest.x, rest.y, rest.w, rest.h, 8 * S);
-
   push();
-  translate(rest.x + 14 * S, rest.y + 14 * S);
+  translate(rest.x + rest.w / 2 - 26 * S, rest.y + rest.h / 2 - 14 * S);
   fill(200, 140, 80);
-  rect(2 * S, 14 * S, 50 * S, 10 * S);
-  rect(6 * S, 6 * S, 46 * S, 10 * S);
-  rect(10 * S, -2 * S, 42 * S, 10 * S);
+  rect(2 * S, 14 * S, 50 * S, 9 * S);
+  rect(6 * S, 6 * S, 44 * S, 9 * S);
+  rect(10 * S, -2 * S, 38 * S, 9 * S);
   fill(140, 80, 35);
   rect(2 * S, 18 * S, 50 * S, 1 * S);
-  rect(6 * S, 10 * S, 46 * S, 1 * S);
-  rect(10 * S, 2 * S, 42 * S, 1 * S);
+  rect(6 * S, 10 * S, 44 * S, 1 * S);
+  rect(10 * S, 2 * S, 38 * S, 1 * S);
   pop();
   fill(255);
-  textSize(12 * S);
+  textSize(13 * S);
   text('잠시 쉬기', rest.x + rest.w / 2, rest.y + rest.h - 12 * S);
+
+  // [앞으로 가기] — 패널 아래쪽, 크게
+  fill(40, 10, 15);
+  rect(fwd.x + 3 * S, fwd.y + 6 * S, fwd.w, fwd.h, 12 * S);
+  fill(220, 60, 70);
+  rect(fwd.x, fwd.y, fwd.w, fwd.h, 12 * S);
+  fill(255, 120, 130);
+  rect(fwd.x + 8 * S, fwd.y + 8 * S, fwd.w - 16 * S, 7 * S, 6 * S);
+  fill(255);
+  textSize(34 * S);
+  text('▶', fwd.x + fwd.w / 2, fwd.y + fwd.h / 2 - 18 * S);
+  textSize(20 * S);
+  text('앞으로', fwd.x + fwd.w / 2, fwd.y + fwd.h / 2 + 18 * S);
 }
 
 // ---------- end card ----------
@@ -384,6 +622,12 @@ function drawEndCard() {
 
 // ---------- input ----------
 function handlePress(mx, my) {
+  if (phase === 'title') {
+    if (isPortrait()) return;                         // 세로면 먼저 가로로 돌리도록 무시
+    if (titleSlide < TITLE_SLIDES - 1) titleSlide++;  // 다음 슬라이드로
+    else startGame();                                 // 마지막 슬라이드 → 게임 시작
+    return;
+  }
   if (phase === 'countdown') return;
   if (phase === 'win' || phase === 'lose') {
     if (millis() - endShownAt > 800) resetGame();
@@ -425,9 +669,10 @@ function lookBtnVisible() {
 }
 
 function lookBtn() {
-  const w = W * 0.52;
+  const cx = PANEL_LEFT / 2;          // 플레이 영역(좌측) 중앙
+  const w = PANEL_LEFT * 0.5;
   const h = 36 * S;
-  return { x: W / 2 - w / 2, y: ROOM_TOP + 6 * S, w, h };
+  return { x: cx - w / 2, y: ROOM_TOP + 6 * S, w, h };
 }
 
 function backBtn() {
@@ -519,8 +764,8 @@ function drawApartment() {
   textAlign(CENTER, CENTER);
   text('아파트 — 다들 각자의 방에서', W / 2, topPad / 2);
 
-  // 6개 방 그리드 (2열 x 3행)
-  const cols = 2;
+  // 6개 방 그리드 (가로: 3열 x 2행)
+  const cols = 3;
   const rows = Math.ceil(APARTMENT_ROOMS / cols);
   const outer = 14 * S;
   const gap = 10 * S;
