@@ -1,5 +1,22 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* 게임 캔버스와 리포트가 공유하는 폰트 (p5는 loadFont로 별도 로드) */
+@font-face {
+  font-family: 'EFMacho';
+  src: url('src/폰트/EF_MACHO/EF_MACHO(ttf).ttf') format('truetype');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NexonGothic';
+  src: url('src/폰트/NEXON_Lv1_Gothic/NEXON Lv1 Gothic_OTF_TTF/TTF/NEXONLv1GothicRegular.ttf') format('truetype');
+  font-weight: 400; font-display: swap;
+}
+@font-face {
+  font-family: 'NexonGothic';
+  src: url('src/폰트/NEXON_Lv1_Gothic/NEXON Lv1 Gothic_OTF_TTF/TTF/NEXONLv1GothicBold.ttf') format('truetype');
+  font-weight: 700; font-display: swap;
+}
+
 html, body {
   width: 100%;
   height: 100%;
@@ -18,3 +35,174 @@ html, body {
 canvas {
   display: block;
 }
+
+/* ---------- 현황·크레딧 리포트 오버레이 (part 3) ---------- */
+#report {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: none;
+  background: #04216c;                 /* 오프닝과 동일한 네이비 */
+  color: #fff;
+  overflow-y: auto;
+  overflow-x: hidden;
+  touch-action: pan-y;                 /* 세로 스크롤 허용 (body는 none) */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  font-family: 'NexonGothic', -apple-system, "Noto Sans KR", sans-serif;
+  line-height: 1.7;
+}
+#report.show { display: block; }
+
+.report-inner {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 9vmin 7vw 16vmin;
+}
+
+#report .kicker {
+  font-size: clamp(13px, 2.4vmin, 18px);
+  letter-spacing: .12em;
+  color: #9fb2ec;
+  margin-bottom: .6em;
+}
+#report .stat {
+  font-family: 'EFMacho', sans-serif;
+  line-height: 1;
+  margin-bottom: .25em;
+}
+#report .stat em {
+  font-style: normal;
+  font-size: clamp(64px, 18vmin, 150px);
+  color: #fff;
+}
+#report .stat-sub {
+  font-size: clamp(16px, 3vmin, 24px);
+  color: #dde4f7;
+  margin-bottom: 9vmin;
+}
+#report .stat-sub strong { color: #fff; font-weight: 700; }
+
+/* 그래프 카드 */
+.chart-card {
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 16px;
+  padding: 6vmin 5vmin 5vmin;
+  margin-bottom: 9vmin;
+}
+.chart-title {
+  font-size: clamp(14px, 2.7vmin, 20px);
+  font-weight: 700;
+  margin-bottom: 5vmin;
+  color: #eef2fd;
+}
+.chart-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2.5%;
+}
+.bar-col {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.bar-val {
+  font-size: clamp(11px, 2.4vmin, 17px);
+  font-weight: 700;
+  color: #9fb2ec;
+  margin-bottom: 1vmin;
+}
+.bar {
+  width: 64%;
+  min-height: 3px;
+  background: linear-gradient(180deg, #9fb6ff, #3f63ff);
+  border-radius: 6px 6px 0 0;
+}
+.bar-label {
+  margin-top: 1.4vmin;
+  font-size: clamp(10px, 2.1vmin, 15px);
+  color: #cdd6f0;
+  text-align: center;
+  line-height: 1.25;
+}
+.chart-note {
+  margin-top: 4vmin;
+  font-size: clamp(10px, 1.9vmin, 13px);
+  color: #8b9bc9;
+  line-height: 1.6;
+}
+
+/* 본문 블록 */
+#report .block { margin-bottom: 9vmin; }
+#report .block p {
+  font-size: clamp(14px, 2.5vmin, 19px);
+  color: #e6ebfa;
+  margin-bottom: 1em;
+}
+#report .block-title {
+  font-family: 'EFMacho', sans-serif;
+  font-size: clamp(16px, 3vmin, 22px);
+  color: #9fb2ec;
+  margin-bottom: 1.2em;
+  letter-spacing: .04em;
+}
+#report .question {
+  font-family: 'EFMacho', sans-serif;
+  font-size: clamp(18px, 3.6vmin, 28px);
+  color: #fff;
+  line-height: 1.5;
+  margin-top: 1.4em;
+}
+
+/* 인용 */
+#report .refs p {
+  font-size: clamp(11px, 2vmin, 14px);
+  color: #c1cae6;
+  line-height: 1.6;
+}
+#report .refs a { color: #9fb6ff; word-break: break-all; }
+
+/* 크레딧 */
+#report .credits { text-align: center; }
+#report .credits .team {
+  font-family: 'EFMacho', sans-serif;
+  font-size: clamp(18px, 3.4vmin, 26px);
+  color: #fff;
+  margin-bottom: .3em;
+}
+#report .credits .names {
+  font-size: clamp(14px, 2.6vmin, 19px);
+  color: #dde4f7;
+  margin-bottom: 1.4em;
+}
+#report .credits .affil {
+  font-size: clamp(12px, 2.3vmin, 16px);
+  color: #aab8e0;
+  margin-bottom: .3em;
+}
+
+/* 피날레: 로고 + 리플레이 버튼 */
+.finale { text-align: center; margin-top: 11vmin; }
+.finale-logo {
+  width: min(60vw, 320px);
+  height: auto;
+  display: block;
+  margin: 0 auto 7vmin;
+}
+#report-replay {
+  font-family: 'EFMacho', sans-serif;
+  font-size: clamp(16px, 3vmin, 22px);
+  color: #04216c;
+  background: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: .7em 2.2em;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform .12s ease, background .12s ease;
+}
+#report-replay:hover { background: #e9eefc; }
+#report-replay:active { transform: scale(.96); }

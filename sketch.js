@@ -44,7 +44,7 @@ let lastBoxDrop = 0;
 let boxFlashAt = -9999;
 let heldRest = false;
 let endShownAt = 0;
-let outroStart = 0;                 // 엔딩 메시지 다음 '피자 이스케이프' 로고 아웃트로 진입 시각
+let canvasEl = null;                // p5 캔버스 핸들 (리포트 표시 중 숨김)
 let titleSlide = 0;                 // 오프닝 슬라이드 (0=히어로,1=랜딩,2~4=How to Play)
 
 // 둘러보기 상태
@@ -75,10 +75,11 @@ function preload() {
 
 function setup() {
   recomputeLayout();
-  const cnv = createCanvas(W, H);
-  cnv.style('display', 'block');
+  canvasEl = createCanvas(W, H);
+  canvasEl.style('display', 'block');
   smooth();
   textAlign(CENTER, CENTER);
+  setupReport();   // 현황·크레딧 리포트(DOM) 차트 렌더 + 리플레이 버튼 바인딩
   resetGame();
   phase = 'title';   // 첫 진입은 오프닝 로고 (재도전은 곧장 카운트다운)
 }
@@ -117,7 +118,6 @@ function resetGame() {
   lastBoxDrop = 0;
   boxFlashAt = -9999;
   heldRest = false;
-  outroStart = 0;
   usedLookAround = false;
   lookStart = 0;
   lookMsg = '';
@@ -138,8 +138,7 @@ function draw() {
   if (phase === 'title') { drawTitleScreen(); return; }
   // 그 외 페이즈에서 세로로 들면 게임을 멈추고 회전 안내 (가로 고정)
   if (isPortrait()) { drawRotateHint(); return; }
-  // 엔딩 메시지 다음의 로고 아웃트로 (씬/HUD 없이 네이비 전체화면)
-  if (phase === 'outro') { drawOutro(); return; }
+  // 엔딩 다음 현황·크레딧은 DOM 리포트가 캔버스를 덮음 → draw는 noLoop로 멈춤(showReport)
 
   if (phase === 'countdown') stepCountdown();
   else if (phase === 'playing') stepPlaying();
@@ -705,51 +704,57 @@ function drawEndCard() {
   textAlign(CENTER, CENTER);  // 다른 페이즈 기본값 복원
 }
 
-// ---------- 로고 아웃트로 (피자 이스케이프 → 게임 리플레이) ----------
-const OUTRO_LOGO_MS = 1100;   // 로고만 보이는 시간 → 이후 리플레이 버튼 페이드인
+// ---------- 현황·크레딧 리포트 (DOM 오버레이, part 3) ----------
+// 피자 은유 → 한국 은둔고립 현황 통계/그래프 → 프로젝트 설명 → 인용 → 크레딧 → 리플레이.
+// 캔버스가 아닌 index.html의 #report 오버레이로 렌더(긴 본문·링크·로고·스크롤은 DOM이 적합).
 
-function enterOutro() {
-  phase = 'outro';
-  outroStart = millis();
+// 그래프 데이터 — '다른 사람들로부터 고립되어 있다고 느낀 기간' (한국청소년정책연구원/KOSIS)
+// ⚠ 아래는 예시(placeholder) 수치. 실제 KOSIS 값으로 교체할 것.
+const LONELINESS_DATA = [
+  { label: '거의 없음', value: 41 },
+  { label: '한 달 미만', value: 23 },
+  { label: '1~6개월',  value: 17 },
+  { label: '6개월~1년', value: 11 },
+  { label: '1년 이상',  value: 8 },
+];
+
+// setup()에서 1회: 그래프 막대 렌더 + 리플레이 버튼 클릭 바인딩
+function setupReport() {
+  const host = document.getElementById('report-chart');
+  if (host) {
+    const maxV = Math.max(...LONELINESS_DATA.map(d => d.value));
+    host.innerHTML = '';
+    for (const d of LONELINESS_DATA) {
+      const col = document.createElement('div'); col.className = 'bar-col';
+      const val = document.createElement('div'); val.className = 'bar-val'; val.textContent = d.value + '%';
+      const bar = document.createElement('div'); bar.className = 'bar';
+      bar.style.height = (d.value / maxV * 22) + 'vmin';   // 최대 막대 = 22vmin
+      const lab = document.createElement('div'); lab.className = 'bar-label'; lab.textContent = d.label;
+      col.appendChild(val); col.appendChild(bar); col.appendChild(lab);
+      host.appendChild(col);
+    }
+  }
+  const btn = document.getElementById('report-replay');
+  if (btn) btn.addEventListener('click', replayFromReport);
 }
 
-function drawOutro() {
-  background(OPEN_BG[0], OPEN_BG[1], OPEN_BG[2]);
+// 엔딩 메시지 탭 → 리포트 오버레이 표시 (캔버스 숨기고 draw 정지)
+function showReport() {
+  const r = document.getElementById('report');
+  if (!r) { resetGame(); return; }   // 안전장치: 오버레이가 없으면 바로 재시작
+  r.classList.add('show');
+  r.scrollTop = 0;
+  if (canvasEl) canvasEl.hide();
+  noLoop();
+}
 
-  // 로고 락업 (피자박스 + '피자 이스케이프' 워드마크 = 로고.png)
-  const img = IMAGES.logo;
-  if (img) {
-    const ar = img.width / img.height;
-    let h = H * 0.55, w = h * ar;
-    const maxW = W * 0.62;
-    if (w > maxW) { w = maxW; h = w / ar; }
-    imageMode(CENTER);
-    image(img, W / 2, H * 0.40, w, h);
-    imageMode(CORNER);
-  }
-
-  // 리플레이 버튼 (로고가 자리잡은 뒤 페이드 인)
-  const t = millis() - outroStart;
-  if (t > OUTRO_LOGO_MS) {
-    const a = Math.min(255, (t - OUTRO_LOGO_MS) / 350 * 255);
-    textFont(FONTS.macho);
-    textAlign(LEFT, CENTER);
-    const fs = H * 0.052;
-    textSize(fs);
-    const label = '게임 리플레이하기';
-    const tw = textWidth(label);
-    const tr = fs * 0.40;          // ▶ 삼각형 반높이
-    const gap = fs * 0.5;
-    const groupW = tr * 1.2 + gap + tw;
-    const startX = W / 2 - groupW / 2;
-    const cy = H * 0.84;
-    noStroke();
-    fill(255, a);
-    triangle(startX, cy - tr, startX, cy + tr, startX + tr * 1.2, cy);
-    text(label, startX + tr * 1.2 + gap, cy);
-  }
-
-  textAlign(CENTER, CENTER);
+// 리포트의 [게임 리플레이하기] → 오버레이 숨기고 게임 재시작(카운트다운부터)
+function replayFromReport() {
+  const r = document.getElementById('report');
+  if (r) r.classList.remove('show');
+  if (canvasEl) canvasEl.show();
+  resetGame();
+  loop();
 }
 
 // ---------- input ----------
@@ -762,12 +767,7 @@ function handlePress(mx, my) {
   }
   if (phase === 'countdown') return;
   if (phase === 'win' || phase === 'lose') {
-    if (millis() - endShownAt > 900) enterOutro();   // 엔딩 메시지 → 로고 아웃트로
-    return;
-  }
-  if (phase === 'outro') {
-    // 로고가 뜨고 리플레이 버튼이 나타난 뒤에만 재시작
-    if (millis() - outroStart > OUTRO_LOGO_MS) resetGame();
+    if (millis() - endShownAt > 900) showReport();   // 엔딩 메시지 → 현황·크레딧 리포트
     return;
   }
   if (phase === 'lookaround') {
