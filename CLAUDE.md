@@ -29,10 +29,10 @@ A mobile-first p5.js browser game — Stage 1 MVP of an escape-room game themed 
 
 **3. 메세지 전달 파트 (20초).** 한국의 은둔고립 현황 정보(통계 소개 → 그래프) + 프로젝트 설명: "이 프로젝트는 은둔고립이 얼마나 우리 일상과 가까운지 전달하기 위해 기획되었습니다. 우리가 지고 있는 피자박스는 개인의 실패가 아니라 팍팍한 사회적 구조 속에서 만들어진 짐입니다." 이어서 크레딧(팀 포스트히키코모리 / 서강대학교 아트앤테크놀로지 w/ Kakao Impact + 안무서운회사)과 리플레이 탭.
 
-**현재 코드와의 대응.** 현재 `sketch.js`는 게임 플레이 코어 루프만 구현했고, `phase` 종료 상태는 위 엔딩에 다음과 같이 대응한다:
-- `lose`(침대 잠식·박스 과적)는 **하나의 '실패/매몰' 계열 엔딩**이고, `loseReason`(`'bed'` | `'crushed'`)은 엔드카드 **멘트만** 달리 띄우는 분기다(침대 매몰 텍스트 vs 박스에 짓눌림 텍스트). 현재 코드 구조(같은 `lose` phase + `loseReason`별 텍스트)가 이 설계와 그대로 맞다. [둘러보기]가 박스를 줄여주므로 박스 과적(crush) 패배를 회피하는 수단이 된다.
-- `win`(문 도달)은 본편에서 **[둘러보기] 사용 여부에 따라 "혼자 클리어"와 "둘러보기 후 클리어" 두 엔딩으로 분기**된다 → 둘러보기 사용 플래그를 추적해야 한다.
-- "본편" 기능 = **[둘러보기] → 줌아웃(아파트, 연대) → 플레이 복귀(박스 감소)** 흐름. (sketch.js 엔드카드 힌트가 아직 "HELP → 줌아웃"으로 적혀 있는데, 본편 반영 시 [둘러보기] 흐름으로 갱신 필요.)
+**현재 코드와의 대응.** 코어 루프 + 둘러보기 + **엔딩 3갈래 + 로고 아웃트로**까지 구현됨. `phase` 종료 상태는 위 엔딩에 다음과 같이 대응한다(구현 완료):
+- `lose`(침대 잠식·박스 과적)는 **하나의 '실패/매몰' 계열 엔딩**이고, `loseReason`(`'bed'` | `'crushed'`)은 엔드카드 **멘트만** 달리 띄우는 분기다(침대 매몰 텍스트 vs 박스에 짓눌림 텍스트). `endingContent()`가 `loseReason`별 텍스트를 반환한다. [둘러보기]가 박스를 줄여주므로 박스 과적(crush) 패배를 회피하는 수단이 된다.
+- `win`(문 도달)은 **`usedLookAround`로 "혼자 클리어"(밝은 톤)와 "둘러보기 후 클리어=진엔딩"(파란 톤·연대)으로 분기**된다.
+- "본편" 기능 = **[둘러보기] → 줌아웃(아파트, 연대) → 플레이 복귀(박스 감소)** 흐름까지 코드에 들어옴. 엔딩 후엔 `'outro'`(피자 이스케이프 로고 → 게임 리플레이) 단계로 이어진다.
 
 ## 현재 진행 상황 (Progress)
 
@@ -44,11 +44,11 @@ A mobile-first p5.js browser game — Stage 1 MVP of an escape-room game themed 
 - **폰트·이미지 로딩 시스템.** `preload()`에서 `FONTS`(KBL Jump 5종 + EF_MACHO + Galmuri11)와 `IMAGES`(로고) 로드. `loadFont`/`loadImage`가 fetch 기반이라 **http 서빙 필수**.
 - **코어 게임 루프** (기존). `countdown → playing → win|lose`: 자동 드리프트, 3초마다 박스 누적, 잠시 쉬기, 침대 매몰(`'bed'`)·박스 과적(`'crushed'`) 패배.
 - **둘러보기 / 아파트뷰** (`'lookaround'`). 박스 4개↑ 또는 침대 근처(왼쪽 2/5) 도달 시 버튼 등장 → 줌아웃 아파트(3×2 그리드) 연출 → 박스 일부 감소 후 플레이 복귀. `usedLookAround` 플래그 추적.
+- **엔딩 3갈래 + 로고 아웃트로** (`drawEndCard()` → `'outro'`). 피그마 `ending` 프레임(노드 `6:646`) 기반. 멈춘 플레이 씬 위에 톤별 워시 + 좌측정렬 메시지: **혼자탈출**(win·둘러보기 미사용=밝은 톤) / **진엔딩**(win·둘러보기 사용=파란 톤·연대) / **게임오버**(lose, `loseReason` `'bed'`·`'crushed'`로 멘트만 분기=어두운 톤). 멘트는 게임 스크립트 독스(Google Docs)에서 가져옴. 엔딩 탭 → `'outro'`(네이비 + `IMAGES.logo` "피자 이스케이프" 락업 → `OUTRO_LOGO_MS` 후 "▶ 게임 리플레이하기" 페이드인) → 탭 시 `resetGame()`로 재도전(카운트다운부터).
 
 **미구현 / 다음 (기획 대비)**
-- **게임 플레이 메인 UI** — 플레이 화면 아트가 전부 코드 도형(스프라이트 미사용). 피그마 `플레이화면 메인UI.png` 등 디자인 미적용. 캐릭터 스프라이트·배경·박스·문 에셋은 `src/`(아래 "에셋")에 있음.
-- **엔딩 화면** — `drawEndCard()`는 임시 플레이스홀더(힌트가 구버전 "HELP" 문구). 피그마 엔딩 디자인 + 3갈래 분기 미적용. 특히 **`win`이 아직 `usedLookAround`로 "혼자 클리어 / 둘러보기 후 클리어"를 분기하지 않음**(플래그만 추적 중).
-- **메세지 전달 파트(part 3)** — 통계·그래프·크레딧·리플레이 전무.
+- **게임 플레이 메인 UI** — 플레이 화면 아트가 전부 코드 도형(스프라이트 미사용). 피그마 `플레이화면 메인UI.png` 등 디자인 미적용. 캐릭터 스프라이트·배경·박스·문 에셋은 `src/`(아래 "에셋")에 있음. 엔딩도 멈춘 코드-도형 씬을 워시로 깐 형태라, 실제 엔딩 배경 PNG(`밝은/어두운 배경 UI.png`)·캐릭터 스프라이트로 교체 여지 있음.
+- **메세지 전달 파트(part 3)** — 통계·그래프·크레딧·리플레이 전무. (현재 엔딩은 메시지 카드 → 로고 아웃트로까지만. part 3는 아웃트로와 리플레이 사이에 들어갈 자리.)
 - **오프닝 자동 진행** — 현재 탭 수동. 전시 타이밍(80초)에 맞춘 자동 넘김은 옵션으로 검토 가능.
 - **모바일 폰트 경량화** — Galmuri11 TTF가 ~5MB. 배포 시 woff2 `@font-face`(패밀리명 `textFont`) 전환 권장(단 비동기 로드라 준비 게이팅 필요).
 
@@ -70,7 +70,9 @@ p5.js v1.10.0 and p5.sound are vendored in `libraries/` and loaded via `<script>
 
 Everything lives in `sketch.js` (p5 global mode). Three concerns to know before editing:
 
-**Phase state machine.** A single `phase` string (`'title'` → `'countdown'` → `'playing'` → `'win'` | `'lose'`, with `'lookaround'` branching off `'playing'`) drives the whole game. `draw()` is the dispatcher: it short-circuits to the opening (`'title'`) or, in any other phase, to a rotate-hint when the device is held portrait; otherwise it calls the matching `step*()` updater, renders the scene/HUD, then layers phase-specific overlays. State transitions happen *inside* the `step*()` functions (e.g. `stepPlaying()` flips `phase` to `'win'`/`'lose'`). `setup()` enters `'title'`; `resetGame()` restores all mutable state and is called on tap from an end card (replay skips the title, going straight to countdown).
+**Phase state machine.** A single `phase` string (`'title'` → `'countdown'` → `'playing'` → `'win'` | `'lose'` → `'outro'`, with `'lookaround'` branching off `'playing'`) drives the whole game. `draw()` is the dispatcher: it short-circuits to the opening (`'title'`), the rotate-hint when held portrait, or the `'outro'` logo screen; otherwise it calls the matching `step*()` updater, renders the scene/HUD, then layers phase-specific overlays. State transitions happen *inside* the `step*()` functions (e.g. `stepPlaying()` flips `phase` to `'win'`/`'lose'`). A tap on an end card (after a ~900ms guard) calls `enterOutro()` (`phase='outro'`); a tap on the outro (after `OUTRO_LOGO_MS`) calls `resetGame()`. `setup()` enters `'title'`; `resetGame()` restores all mutable state (and resets `textFont`) — replay skips the title, going straight to countdown.
+
+**Endings (`drawEndCard()` → `'outro'`).** Three branches keyed off `phase`/`usedLookAround`/`loseReason`, content in `endingContent()`: 혼자탈출 (`win` & !`usedLookAround`, light tone), 진엔딩 (`win` & `usedLookAround`, blue tone), 게임오버 (`lose`, dark tone, `loseReason` picks the copy). Each draws the frozen play scene + a tonal full-screen wash + a left-aligned title (`FONTS.macho`) / body (`FONTS.nexon` = NEXON Lv1 Gothic), auto-shrunk to fit width. `'outro'` (`drawOutro()`) shows `IMAGES.logo` ("피자 이스케이프" lockup) on navy, then fades in "▶ 게임 리플레이하기" after `OUTRO_LOGO_MS`. Ported from the Figma `ending` frame (node `6:646`); copy from the game-script Google Doc.
 
 **Opening (`'title'`).** A 5-slide onboarding (navy `#04216c`, white text): `titleSlide` 0 = hero (`IMAGES.logo` = `로고.png` lockup), 1 = landing copy, 2 = centered "HOW TO PLAY", 3 = "HOW TO PLAY" + controls table, 4 = table + "▶ 게임 시작하기". Slides 1-4 are ported from the Figma `opening` frame. A tap advances `titleSlide` (count = `TITLE_SLIDES`); on the last slide it calls `startGame()` → `'countdown'`. Slide art uses `openingBox()` (fits the 2614×1206 design frame into the viewport) plus the loaded fonts/images; `textTracked()` does letter-spacing manually. Edit slides in `drawSlideHero()` / `drawSlideLanding()` / `drawSlideHowToTitle()` / `drawSlideHowTo()`.
 
@@ -89,4 +91,4 @@ Everything lives in `sketch.js` (p5 global mode). Three concerns to know before 
 ## Conventions
 
 - Keep UI strings and gameplay comments in Korean to match the existing codebase.
-- The end cards reference planned "본편" (full version) features — zoom-out, multi-room, and a mid-game **[둘러보기]** button (which replaces the older HELP idea). These are the product direction, not existing code; see "전체 유저 경험" above for the current design. Note: the live design diverges from the 5/25 Figma here — [둘러보기] is a mid-game relief button that loops back into play (boxes reduced), not an ending trigger.
+- The mid-game **[둘러보기]** button (replacing the older HELP idea) is a relief button that loops back into play with boxes reduced — *not* an ending trigger. Its use (`usedLookAround`) is what splits the `win` ending into 혼자탈출 vs 진엔딩. The live design diverges from the 5/25 Figma on this point; see "전체 유저 경험" above for the current design.

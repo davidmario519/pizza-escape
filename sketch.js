@@ -44,6 +44,7 @@ let lastBoxDrop = 0;
 let boxFlashAt = -9999;
 let heldRest = false;
 let endShownAt = 0;
+let outroStart = 0;                 // 엔딩 메시지 다음 '피자 이스케이프' 로고 아웃트로 진입 시각
 let titleSlide = 0;                 // 오프닝 슬라이드 (0=히어로,1=랜딩,2~4=How to Play)
 
 // 둘러보기 상태
@@ -65,6 +66,7 @@ function preload() {
     // 오프닝 디자인(피그마)용
     macho:        loadFont('src/폰트/EF_MACHO/EF_MACHO(ttf).ttf'),       // 한글 제목·라벨·버튼
     galmuri:      loadFont('src/폰트/Galmuri-v2/Galmuri11.ttf'),         // 본문 설명 (픽셀, ~5MB)
+    nexon:        loadFont('src/폰트/NEXON_Lv1_Gothic/NEXON Lv1 Gothic_OTF_TTF/TTF/NEXONLv1GothicRegular.ttf'), // 엔딩 본문 (고딕)
   };
   IMAGES = {
     logo: loadImage('src/화면 UI/로고.png'),   // 히어로 메인 로고 (피자박스 + 워드마크)
@@ -115,11 +117,13 @@ function resetGame() {
   lastBoxDrop = 0;
   boxFlashAt = -9999;
   heldRest = false;
+  outroStart = 0;
   usedLookAround = false;
   lookStart = 0;
   lookMsg = '';
   apartmentRooms = [];
   titleSlide = 0;
+  textFont('sans-serif');  // 엔딩/아웃트로에서 바꾼 폰트 원복 (게임 텍스트는 기본 폰트)
 }
 
 // 오프닝 → 게임 시작 (카운트다운 진입)
@@ -134,6 +138,8 @@ function draw() {
   if (phase === 'title') { drawTitleScreen(); return; }
   // 그 외 페이즈에서 세로로 들면 게임을 멈추고 회전 안내 (가로 고정)
   if (isPortrait()) { drawRotateHint(); return; }
+  // 엔딩 메시지 다음의 로고 아웃트로 (씬/HUD 없이 네이비 전체화면)
+  if (phase === 'outro') { drawOutro(); return; }
 
   if (phase === 'countdown') stepCountdown();
   else if (phase === 'playing') stepPlaying();
@@ -584,40 +590,166 @@ function drawButtons() {
   text('앞으로', fwd.x + fwd.w / 2, fwd.y + fwd.h / 2 + 18 * S);
 }
 
-// ---------- end card ----------
+// ---------- end card (엔딩 3갈래) ----------
+// 피그마 ending 프레임(6:646) 기준. 멈춘 플레이 씬 위에 톤별 워시 + 좌측정렬 메시지.
+//  - 혼자탈출 (win, 둘러보기 미사용) → 밝은 톤
+//  - 진엔딩   (win, 둘러보기 사용)   → 파란 톤 (연대)
+//  - 게임오버 (lose)                → 어두운 톤 (loseReason으로 멘트만 분기)
+function endingContent() {
+  if (phase === 'win' && !usedLookAround) {
+    return {
+      tone: 'light',
+      title: ['축하합니다. 당신은 혼자만의 힘으로', '이 좁은 방을 탈출했습니다.'],
+      body: [
+        '그런데 왜 아직도 어깨는 무겁고 숨이 차오를까요?',
+        '세상이 던지는 상자들을 오롯이 혼자 받아내며 걷는 길은 너무나 외롭고 고단합니다.',
+        '인생은 혼자만의 레이스가 아닙니다.',
+        '가끔은 주변을 둘러보세요. 당신과 똑같은 무게를 지고',
+        '당신 곁을 나란히 걷고 있는 수많은 청년들이 보일 것입니다.',
+      ],
+    };
+  }
+  if (phase === 'win') {  // usedLookAround === true → 진엔딩 (둘러보기 후 클리어)
+    return {
+      tone: 'blue',
+      title: ['힘들 때는 힘들다고 말하십시오.'],
+      body: [
+        '당신은 혼자가 아닙니다. 다들 나만 빼고 완벽하게 잘 사는 것 같아 보여도,',
+        '알고 보면 모두 당신처럼 넘어지고 끙끙대며 살아갑니다.',
+        '그 무게가 두렵다고 좁은 방의 문을 걸어 잠그지 마십시오.',
+        '힘들 때는 힘들다고 말하십시오.',
+        '고개를 돌려보면, 저마다의 지게를 진 채 묵묵히 걸어가는 우리가 함께 있을 테니까요.',
+      ],
+    };
+  }
+  if (loseReason === 'crushed') {  // 박스 과적 매몰
+    return {
+      tone: 'dark',
+      title: ['쌓이고 쌓인 상자에', '결국 짓눌려 버렸군요.'],
+      body: [
+        '괜찮습니다. 모든 짐을 혼자 짊어지려 하지 않아도 됩니다.',
+        '너무 많은 것을 한꺼번에 견디려 하면 누구든 무너지기 마련입니다.',
+        '잠시 숨을 고르고, 짐을 나누어 가질 사람들을 떠올려 보세요.',
+        '방 밖의 세상은 여전히 당신이 문을 열어주기를 기다리고 있습니다.',
+      ],
+    };
+  }
+  return {  // loseReason === 'bed' — 침대 매몰
+    tone: 'dark',
+    title: ['지게가 너무 무거워 결국', '익숙한 침대에 주저앉아 버렸군요.'],
+    body: [
+      '괜찮습니다. 지치면 잠시 누워 숨을 고를 수도 있지요.',
+      '하지만 기억하세요. 그 좁은 침대 위에서는',
+      '등에 진 무거운 상자들을 절대 내려놓을 수 없습니다.',
+      '조금만 쉬어간 후에, 다시 허리를 펴고 문을 바라보아도 늦지 않습니다.',
+      '방 밖의 세상은 여전히 당신이 문을 열어주기를 기다리고 있습니다.',
+    ],
+  };
+}
+
 function drawEndCard() {
-  fill(0, 200);
+  const e = endingContent();
+  let wash, titleCol, bodyCol;
+  if (e.tone === 'light') {
+    wash = color(240, 243, 248, 226); titleCol = color(4, 33, 108); bodyCol = color(78, 82, 96);
+  } else if (e.tone === 'blue') {
+    wash = color(29, 63, 143, 232); titleCol = color(10, 26, 74); bodyCol = color(232, 238, 250);
+  } else {
+    wash = color(14, 16, 30, 226); titleCol = color(255); bodyCol = color(202, 208, 224);
+  }
+
+  // 멈춘 씬 위에 톤 워시 (씬이 살짝 비쳐 보이도록)
+  noStroke();
+  fill(wash);
   rect(0, 0, W, H);
 
-  let title, body, hint;
-  if (phase === 'win') {
-    title = '문에 도달했습니다';
-    body = '(1단계 클리어 — 2단계 추가 예정)';
-    hint = '※ 본편: 줌아웃 + 멀티룸 연출';
-  } else if (loseReason === 'crushed') {
-    title = '박스 무게에 짓눌렸습니다';
-    body = '지게가 더 이상 버티지 못했습니다';
-    hint = '※ 본편: HELP → 줌아웃 → 함께 탈출';
-  } else {
-    title = '침대에 잠식되었습니다';
-    body = '(여기서 HELP 버튼이 등장합니다)';
-    hint = '※ 본편: HELP → 줌아웃 → 함께 탈출';
+  const x0 = W * 0.10;          // 좌측 여백
+  const maxW = W * 0.80;        // 텍스트 폭 한계 (좁은 가로비에서 자동 축소)
+
+  // 제목 (EF_MACHO) — 가장 긴 줄이 maxW를 넘으면 줄여서 맞춤
+  textFont(FONTS.macho);
+  textAlign(LEFT, TOP);
+  let tSize = H * 0.072;
+  textSize(tSize);
+  let tWide = 0;
+  for (const ln of e.title) tWide = Math.max(tWide, textWidth(ln));
+  if (tWide > maxW) { tSize *= maxW / tWide; textSize(tSize); }
+  const tLead = tSize * 1.3;
+
+  const titleTop = H * 0.23;
+  fill(titleCol);
+  for (let i = 0; i < e.title.length; i++) text(e.title[i], x0, titleTop + i * tLead);
+
+  // 본문 (NEXON Lv1 Gothic)
+  const bodyTop = titleTop + e.title.length * tLead + H * 0.05;
+  textFont(FONTS.nexon);
+  let bSize = H * 0.040;
+  textSize(bSize);
+  let bWide = 0;
+  for (const ln of e.body) bWide = Math.max(bWide, textWidth(ln));
+  if (bWide > maxW) { bSize *= maxW / bWide; textSize(bSize); }
+  const bLead = bSize * 1.55;
+  fill(bodyCol);
+  for (let i = 0; i < e.body.length; i++) text(e.body[i], x0, bodyTop + i * bLead);
+
+  // 탭 안내 (우하단, 제목색으로 깜빡)
+  if (millis() - endShownAt > 900) {
+    textFont(FONTS.macho);
+    textAlign(RIGHT, BOTTOM);
+    textSize(H * 0.034);
+    const a = 150 + sin(millis() / 350) * 80;
+    fill(red(titleCol), green(titleCol), blue(titleCol), a);
+    text('탭하여 계속  ▶', W - W * 0.08, H - H * 0.08);
   }
 
-  fill(255);
-  textSize(22 * S);
-  text(title, W / 2, H / 2 - 50 * S);
-  textSize(13 * S);
-  fill(230, 230, 230);
-  text(body, W / 2, H / 2 - 10 * S);
-  fill(160, 200, 220);
-  text(hint, W / 2, H / 2 + 14 * S);
+  textAlign(CENTER, CENTER);  // 다른 페이즈 기본값 복원
+}
 
-  if (millis() - endShownAt > 800) {
-    fill(255, 200 + sin(millis() / 300) * 40);
-    textSize(12 * S);
-    text('탭하면 다시 시작', W / 2, H / 2 + 60 * S);
+// ---------- 로고 아웃트로 (피자 이스케이프 → 게임 리플레이) ----------
+const OUTRO_LOGO_MS = 1100;   // 로고만 보이는 시간 → 이후 리플레이 버튼 페이드인
+
+function enterOutro() {
+  phase = 'outro';
+  outroStart = millis();
+}
+
+function drawOutro() {
+  background(OPEN_BG[0], OPEN_BG[1], OPEN_BG[2]);
+
+  // 로고 락업 (피자박스 + '피자 이스케이프' 워드마크 = 로고.png)
+  const img = IMAGES.logo;
+  if (img) {
+    const ar = img.width / img.height;
+    let h = H * 0.55, w = h * ar;
+    const maxW = W * 0.62;
+    if (w > maxW) { w = maxW; h = w / ar; }
+    imageMode(CENTER);
+    image(img, W / 2, H * 0.40, w, h);
+    imageMode(CORNER);
   }
+
+  // 리플레이 버튼 (로고가 자리잡은 뒤 페이드 인)
+  const t = millis() - outroStart;
+  if (t > OUTRO_LOGO_MS) {
+    const a = Math.min(255, (t - OUTRO_LOGO_MS) / 350 * 255);
+    textFont(FONTS.macho);
+    textAlign(LEFT, CENTER);
+    const fs = H * 0.052;
+    textSize(fs);
+    const label = '게임 리플레이하기';
+    const tw = textWidth(label);
+    const tr = fs * 0.40;          // ▶ 삼각형 반높이
+    const gap = fs * 0.5;
+    const groupW = tr * 1.2 + gap + tw;
+    const startX = W / 2 - groupW / 2;
+    const cy = H * 0.84;
+    noStroke();
+    fill(255, a);
+    triangle(startX, cy - tr, startX, cy + tr, startX + tr * 1.2, cy);
+    text(label, startX + tr * 1.2 + gap, cy);
+  }
+
+  textAlign(CENTER, CENTER);
 }
 
 // ---------- input ----------
@@ -630,7 +762,12 @@ function handlePress(mx, my) {
   }
   if (phase === 'countdown') return;
   if (phase === 'win' || phase === 'lose') {
-    if (millis() - endShownAt > 800) resetGame();
+    if (millis() - endShownAt > 900) enterOutro();   // 엔딩 메시지 → 로고 아웃트로
+    return;
+  }
+  if (phase === 'outro') {
+    // 로고가 뜨고 리플레이 버튼이 나타난 뒤에만 재시작
+    if (millis() - outroStart > OUTRO_LOGO_MS) resetGame();
     return;
   }
   if (phase === 'lookaround') {
