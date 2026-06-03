@@ -945,10 +945,10 @@ function lookBtnVisible() {
 }
 
 function lookBtn() {
-  const cx = PANEL_LEFT / 2;          // 플레이 영역(좌측) 중앙
-  const w = PANEL_LEFT * 0.5;
-  const h = 36 * S;
-  return { x: cx - w / 2, y: ROOM_TOP + 6 * S, w, h };
+  // 앞으로/잠시 쉬기 스택 위쪽, 같은 우측 패널 컬럼에 뜨는 구제(둘러보기) 버튼
+  const m = PANEL_W * 0.12;
+  const h = H * 0.14;
+  return { x: PANEL_LEFT + m, y: H * 0.14, w: PANEL_W - m * 2, h };
 }
 
 function backBtn() {
@@ -967,7 +967,7 @@ function drawLookBtn() {
   fill(70 + pulse * 45, 200, 160);
   rect(r.x, r.y, r.w, r.h, r.h / 2);
   fill(8, 40, 30);
-  textSize(15 * S);
+  textSize(13 * S);
   textAlign(CENTER, CENTER);
   text('주변 둘러보기', r.x + r.w / 2, r.y + r.h / 2);
 }
