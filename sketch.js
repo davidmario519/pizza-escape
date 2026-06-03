@@ -75,6 +75,7 @@ let boxFlashAt = -9999;
 let heldRest = false;
 let walkUntil = 0;                  // 이 시각(ms) 전까지 걷기 애니메이션 재생 ('앞으로' 탭이 갱신)
 let brightnessOverride = null;      // null이면 밝기=playerX. 아파트뷰 미니 씬이 방별 밝기로 덮어씀.
+let hueOverride = null;             // null이면 색조 없음. 아파트뷰 미니가 방별 [r,g,b] 색조 워시로 덮어씀.
 let endShownAt = 0;
 let canvasEl = null;                // p5 캔버스 핸들 (리포트 표시 중 숨김)
 let titleSlide = 0;                 // 오프닝 슬라이드 (0=히어로,1=랜딩,2~4=How to Play)
@@ -350,6 +351,7 @@ function drawScene() {
 // 대비를 또렷하게: 어두운 끝은 더 깊게(특히 바닥), 밝은 끝은 더 환하게 해 명암 폭을 크게.
 const PAL_DARK_WALL  = [24, 24, 44],    PAL_BRIGHT_WALL  = [216, 216, 230];
 const PAL_DARK_FLOOR = [74, 74, 100],   PAL_BRIGHT_FLOOR = [230, 230, 242];
+const PLAYER_TINT = [4, 33, 108];       // 내 방(=메인 플레이) 기본 색조 #04216C — 색조 워시의 기본값
 
 // ▷ 방 밝기 매핑 (여기 4개 값만 고치면 됨) — b(위치 0=침대~1=문, 아파트뷰는 방별 밝기)를 밝기 f(0~1)로 변환.
 //   map(b, DARK_AT, BRIGHT_AT, MIN, MAX): DARK_AT 지점부터 BRIGHT_AT 지점까지 어두움→밝음, 그 바깥은 끝값으로 고정.
@@ -394,6 +396,13 @@ function drawRoomBackground(seamY, b) {
   fg.addColorStop(1, 'rgba(255,255,255,0.04)');
   drawingContext.fillStyle = fg;
   drawingContext.fillRect(0, seamY, W, H - seamY);
+
+  // 방 색조 워시 — 기본은 '내 방' 네이비(#04216C), 아파트뷰 미니는 방별 색조로 덮어씀.
+  // (오브젝트는 이후에 그려지므로 캐릭터·문·박스는 영향 없음)
+  const tintC = hueOverride || PLAYER_TINT;
+  noStroke();
+  fill(tintC[0], tintC[1], tintC[2], 60);
+  rect(0, 0, W, H);
 }
 
 // 위/아래 가장자리 옅은 프레이밍 (균일한 방 밝기 위에 살짝 깊이만 — 좌우 방향성 없음)
@@ -1083,25 +1092,46 @@ function returnFromLookaround() {
 }
 
 // 아파트뷰 방 구성 (0번 = 플레이어 본인 방, 나머지는 이웃).
-// 방마다 위치(prog)·밝기(bright)·피자박스 수(boxes)를 랜덤화 → "다들 각자의 방에서 버틴다".
+// 방마다 위치(prog)·밝기(bright)·피자박스 수(boxes)를 다르게 + 색조(tint)는 '내 방 네이비'와 같은 파랑 계열로.
+const NAV_HUE = 223;               // #04216C(내 방 네이비)의 색조
+const NEIGHBOR_HUE_BAND = 32;      // 이웃 방 색조가 네이비에서 벗어나는 최대치(±) — 작을수록 더 비슷한 계열
 function buildApartment() {
   apartmentRooms = [];
-  // 0번 = 나 (현재 실제 상태 반영)
+  // 0번 = 나 (현재 실제 상태 반영) — 색조는 테마 네이비 #04216C
   apartmentRooms.push({
     isPlayer: true,
     prog: constrain(playerX, 0.06, 0.94),
     boxes: boxCount,
     bright: constrain(playerX, 0, 1),
+    tint: PLAYER_TINT,             // #04216C (메인 플레이와 동일)
   });
-  // 나머지 = 이웃 (위치/밝기/박스 랜덤)
-  for (let i = 1; i < APARTMENT_ROOMS; i++) {
+  // 나머지 = 이웃: 같은 파랑 계열에서 색조·채도만 살짝 달리 (알록달록하지 않게)
+  const N = APARTMENT_ROOMS;
+  for (let i = 1; i < N; i++) {
+    const t = (i - 1) / (N - 2);                                   // 0..1로 분산
+    const hue = NAV_HUE - NEIGHBOR_HUE_BAND + t * (NEIGHBOR_HUE_BAND * 2) + random(-6, 6);
     apartmentRooms.push({
       isPlayer: false,
       prog: random(0.06, 0.95),
       boxes: Math.floor(random(0, MAX_BOX_COUNT + 1)),
       bright: random(0, 1),
+      tint: hueRGB(hue, random(0.42, 0.66)),
     });
   }
+}
+
+// 색조(deg 0~360) + 채도(sat 0~1, value=1)를 [r,g,b]로 — 방별 색조 워시용
+function hueRGB(deg, sat) {
+  const h = ((deg % 360) + 360) % 360, c = sat;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = 1 - c;
+  let r, g, b;
+  if (h < 60)       { r = c; g = x; b = 0; }
+  else if (h < 120) { r = x; g = c; b = 0; }
+  else if (h < 180) { r = 0; g = c; b = x; }
+  else if (h < 240) { r = 0; g = x; b = c; }
+  else if (h < 300) { r = x; g = 0; b = c; }
+  else              { r = c; g = 0; b = x; }
+  return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
 }
 
 // 참고: src/화면 UI/둘러보기 UI.png — 하늘+구름 위 회색 아파트 외벽, 각 창문이 '실제 플레이 화면'의 축소판.
@@ -1225,7 +1255,7 @@ function drawMiniPlayScene(px, py, pw, ph, room) {
   const sv = {
     W, H, S, ROOM_TOP, ROOM_BOTTOM,
     PLAYER_RANGE_LEFT, PLAYER_RANGE_RIGHT, PANEL_LEFT, PANEL_W,
-    playerX, boxCount, boxFlashAt, heldRest, walkUntil, brightnessOverride,
+    playerX, boxCount, boxFlashAt, heldRest, walkUntil, brightnessOverride, hueOverride,
   };
   push();
   drawingContext.beginPath();
@@ -1240,8 +1270,9 @@ function drawMiniPlayScene(px, py, pw, ph, room) {
   heldRest = false;
   walkUntil = 0;                          // 정지(서있기) 프레임
   brightnessOverride = room.bright;       // 방별 밝기
+  hueOverride = room.tint;                // 방별 색조
 
-  drawScene();                            // 방 배경(밝기)+문+침대+캐릭터+박스
+  drawScene();                            // 방 배경(밝기+색조)+문+침대+캐릭터+박스
   drawButtons();                          // 우측 패널 + 앞으로/잠시 쉬기
   drawLookBtn();                          // 조건 맞으면 초록 '주변 둘러보기' 알약
 
@@ -1249,7 +1280,7 @@ function drawMiniPlayScene(px, py, pw, ph, room) {
   ({
     W, H, S, ROOM_TOP, ROOM_BOTTOM,
     PLAYER_RANGE_LEFT, PLAYER_RANGE_RIGHT, PANEL_LEFT, PANEL_W,
-    playerX, boxCount, boxFlashAt, heldRest, walkUntil, brightnessOverride,
+    playerX, boxCount, boxFlashAt, heldRest, walkUntil, brightnessOverride, hueOverride,
   } = sv);
 }
 
