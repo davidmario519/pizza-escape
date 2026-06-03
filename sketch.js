@@ -46,6 +46,14 @@ const MAX_BOX_COUNT = 8;
 const LOOK_BTN_BOX_MIN = 4;        // 박스 N개 이상이면 둘러보기 버튼 등장
 const LOOK_NEAR_BED = 2 / 5;       // 또는 캐릭터가 화면 왼쪽 1/3(침대 근처) 도달 시
 const LOOK_MSG_MS = 3000;          // 아파트뷰 중앙 문구 노출 시간
+// 둘러보기 진입 → 멘트 전 '손잡기' 인트로 (연대 상징). 공백→3프레임 타이밍(ms) + 끝에 아파트로 페이드.
+const HAND_F0 = 260;               // 공백 프레임 (손 등장 전, 아파트만 — 손이 자연스럽게 등장하도록)
+const HAND_F1 = 460;               // 손 내밀기
+const HAND_F2 = 340;               // 맞잡기
+const HAND_F3 = 720;               // 꽉 잡고 유지
+const HAND_APPEAR = 200;           // 손이 페이드인하며 등장하는 시간
+const HAND_FADE = 320;             // 마지막에 아파트로 페이드아웃
+const HAND_MS = HAND_F0 + HAND_F1 + HAND_F2 + HAND_F3;  // 손잡기 총 길이
 const LOOK_BOX_RELIEF = 0.2;       // 되돌아온 뒤 남는 박스 비율 (80% 덜어냄)
 const APARTMENT_ROOMS = 12;        // 아파트뷰 창문 개수 (3열 × 4행 = 12칸 모두 창문, 0번=플레이어 방)
 const LOOK_MESSAGES = [
@@ -103,6 +111,12 @@ function preload() {
       loadImage('src/게임 오브젝트/구름/cloud_2.png'),  // 559x328 (puffy)
       loadImage('src/게임 오브젝트/구름/cloud_3.png'),  // 380x168 (small)
       loadImage('src/게임 오브젝트/구름/cloud_4.png'),  // 633x143 (flat wide)
+    ],
+    // 둘러보기 인트로 손잡기 (4128x1890, 회색 불투명 배경): 0=손 내밀기 1=맞잡기 2=꽉 잡기
+    hands: [
+      loadImage('src/화면 UI/손잡기/손잡기_1.png'),
+      loadImage('src/화면 UI/손잡기/손잡기_2.png'),
+      loadImage('src/화면 UI/손잡기/손잡기_3.png'),
     ],
   };
 }
@@ -205,20 +219,50 @@ function renderFrame() {
   else if (phase === 'playing') stepPlaying();
   // 'lookaround'에는 step 함수가 없다 → 자동 드리프트·박스 누적이 멈춘다(연출 중 게임 일시정지)
 
-  if (phase === 'lookaround') {
-    drawApartment();
-  } else {
-    drawScene();
-    drawHUD();
-  }
+  if (phase === 'lookaround') { drawLookaround(); return; }  // 손잡기 인트로 → 아파트 + 멘트 → 되돌아가기
+
+  drawScene();
+  drawHUD();
 
   if (phase === 'countdown') drawCountdownOverlay();
   if (phase === 'playing') {
     drawButtons();
     drawLookBtn();
   }
-  if (phase === 'lookaround') drawLookaroundOverlay();
   if (phase === 'win' || phase === 'lose') drawEndCard();
+}
+
+// 둘러보기 진입 연출: 줌아웃된 아파트 위에 (1) 손잡기 인트로(연대) → (2) 페이드아웃 → (3) 멘트 → 되돌아가기.
+// 손잡기 PNG는 손은 불투명·배경은 반투명 어두운 워시라, 아파트 위에 얹으면 아파트가 살짝 어두워지며 손이 도드라진다.
+function drawLookaround() {
+  const e = millis() - lookStart;
+  drawApartment();                              // 손잡기의 배경 컨텍스트 = 줌아웃된 아파트
+  if (e < HAND_MS) {
+    const eh = e - HAND_F0;                     // 손 등장 이후 경과
+    if (eh < 0) return;                         // 공백 프레임: 아파트만 (손은 아직 없음)
+    let a = 255;
+    if (eh < HAND_APPEAR) a = map(eh, 0, HAND_APPEAR, 0, 255);                 // 손 자연스럽게 등장(페이드인)
+    if (e > HAND_MS - HAND_FADE) a = Math.min(a, map(e, HAND_MS - HAND_FADE, HAND_MS, 255, 0));  // 끝에 페이드아웃
+    drawHandshake(eh, a);                       // 손잡기(반투명 딤+손)
+  } else {
+    drawLookaroundOverlay();                    // 멘트 → 되돌아가기
+  }
+}
+
+// 손잡기 인트로 한 프레임 — 이미지를 화면에 cover로 채움(자체 반투명 워시가 아파트를 디밍). alpha로 페이드.
+// eh = 손 등장 이후 경과(ms). 공백 프레임 다음부터 0에서 시작.
+function drawHandshake(eh, alpha) {
+  const idx = eh < HAND_F1 ? 0 : (eh < HAND_F1 + HAND_F2 ? 1 : 2);
+  const img = IMAGES.hands && IMAGES.hands[idx];
+  if (!img) return;
+  const ir = img.width / img.height, sr = W / H;
+  let dw, dh;
+  if (ir > sr) { dh = H; dw = H * ir; } else { dw = W; dh = W / ir; }  // cover
+  push();
+  imageMode(CENTER);
+  tint(255, alpha);
+  image(img, W / 2, H / 2, dw, dh);
+  pop();
 }
 
 // 세로 뷰포트일 때만 캔버스를 90° 회전 (논리 가로 좌표 → 물리 세로 캔버스)
@@ -946,8 +990,8 @@ function handlePress(mx, my) {
     return;
   }
   if (phase === 'lookaround') {
-    // 문구 노출(3초)이 끝난 뒤에만 되돌아가기 가능
-    if (millis() - lookStart > LOOK_MSG_MS && inRect(mx, my, backBtn())) {
+    // 손잡기 인트로 + 문구 노출이 끝난 뒤에만 되돌아가기 가능
+    if (millis() - lookStart > HAND_MS + LOOK_MSG_MS && inRect(mx, my, backBtn())) {
       returnFromLookaround();
     }
     return;
@@ -1206,7 +1250,7 @@ function drawMiniPlayScene(px, py, pw, ph, room) {
 }
 
 function drawLookaroundOverlay() {
-  const elapsed = millis() - lookStart;
+  const elapsed = millis() - lookStart - HAND_MS;   // 손잡기 인트로 이후 기준
 
   if (elapsed < LOOK_MSG_MS) {
     // 중앙 문구 (페이드 인/아웃)
