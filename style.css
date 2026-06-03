@@ -161,12 +161,13 @@ canvas {
 .bar-label { margin-top: .6em; font-size: clamp(10px, calc(var(--ru) * .021), 15px); color: #cdd6f0; text-align: center; line-height: 1.25; }
 .chart-note { margin-top: calc(var(--ru) * .04); font-size: clamp(10px, calc(var(--ru) * .019), 13px); color: #8b9bc9; line-height: 1.55; text-align: center; }
 
-/* 본문 블록 */
-#report .block p { font-size: clamp(14px, calc(var(--ru) * .025), 19px); color: #e6ebfa; margin-bottom: 1em; }
+/* 본문 블록 — 텍스트 많은 슬라이드(설명·인용)는 폰에서 폰트 floor를 낮춰 화면 비율에 맞춤 */
+#report .block p { font-size: clamp(11px, calc(var(--ru) * .029), 18px); color: #e6ebfa; margin-bottom: 1em; }
 #report .block p:last-child { margin-bottom: 0; }
-#report .block-title {
+/* `.block .block-title` 로 특이도를 올려 `.refs p`(인용 본문 규칙)가 제목을 덮어쓰지 않게 */
+#report .block .block-title {
   font-family: 'EFMacho', sans-serif;
-  font-size: clamp(15px, calc(var(--ru) * .03), 22px);
+  font-size: clamp(13px, calc(var(--ru) * .032), 22px);
   color: #9fb2ec;
   margin-bottom: 1.1em;
   letter-spacing: .04em;
@@ -179,7 +180,7 @@ canvas {
 }
 
 /* 인용 */
-#report .refs p { font-size: clamp(11px, calc(var(--ru) * .021), 14px); color: #c1cae6; line-height: 1.6; margin-bottom: 1em; }
+#report .refs p { font-size: clamp(9px, calc(var(--ru) * .024), 14px); color: #c1cae6; line-height: 1.6; margin-bottom: 1em; }
 #report .refs p:last-child { margin-bottom: 0; }
 #report .refs a { color: #9fb6ff; word-break: break-all; }
 
