@@ -2,7 +2,9 @@
 // 혼자만의 고독한 사투
 
 // --- 적응형 캔버스 (가로 모드) ---
-let W, H, S;                            // W/H = 캔버스 픽셀, S = 아트 스케일 (가로 640x360 기준)
+let W, H, S;                            // W/H = 논리 좌표(항상 가로), S = 아트 스케일 (가로 640x360 기준)
+let VW, VH;                             // 실제 뷰포트 픽셀 = 캔버스 크기
+let ROT = false;                        // 세로로 들면 true → 캔버스를 90° 돌려 가로로 렌더(회전 유도)
 let ROOM_TOP, ROOM_BOTTOM;
 let PLAYER_RANGE_LEFT, PLAYER_RANGE_RIGHT;
 let PANEL_LEFT, PANEL_W;                // 우측 컨트롤 패널 (앞으로/쉬기 버튼)
@@ -75,7 +77,7 @@ function preload() {
 
 function setup() {
   recomputeLayout();
-  canvasEl = createCanvas(W, H);
+  canvasEl = createCanvas(VW, VH);
   canvasEl.style('display', 'block');
   smooth();
   textAlign(CENTER, CENTER);
@@ -86,13 +88,17 @@ function setup() {
 
 function windowResized() {
   recomputeLayout();
-  resizeCanvas(W, H);
+  resizeCanvas(VW, VH);
 }
 
 // 뷰포트 크기로부터 레이아웃 좌표·스케일을 재계산 (가로 모드 기준)
 function recomputeLayout() {
-  W = window.innerWidth;
-  H = window.innerHeight;
+  VW = window.innerWidth;
+  VH = window.innerHeight;
+  // 세로로 들면 캔버스를 90° 회전해 가로로 렌더 → 논리 좌표 W/H는 항상 가로(긴 변=W)
+  ROT = VH > VW;
+  W = ROT ? VH : VW;
+  H = ROT ? VW : VH;
   // 가로/세로 중 더 빡빡한 쪽에 맞춰 아트가 화면을 넘지 않게
   S = Math.min(W / DESIGN_W, H / DESIGN_H);
 
@@ -134,10 +140,21 @@ function startGame() {
 }
 
 function draw() {
-  // 오프닝 로고 — 세로면 로고가 옆으로 눕혀져 회전을 유도
+  // 방향 전환 등으로 뷰포트가 바뀌었는데 resize 이벤트를 놓친 경우 대비 (즉시 반영)
+  if (window.innerWidth !== VW || window.innerHeight !== VH) {
+    recomputeLayout();
+    resizeCanvas(VW, VH);
+  }
+  // 세로로 들고 있으면 캔버스를 90° 돌려 '가로'로 그린다 → 사용자가 자연스럽게 기기를 돌리도록 유도
+  push();
+  applyOrientation();
+  renderFrame();
+  pop();
+}
+
+// 실제 렌더 — 항상 논리 가로 좌표(W×H) 기준. 세로면 applyOrientation이 회전을 깔아준다.
+function renderFrame() {
   if (phase === 'title') { drawTitleScreen(); return; }
-  // 그 외 페이즈에서 세로로 들면 게임을 멈추고 회전 안내 (가로 고정)
-  if (isPortrait()) { drawRotateHint(); return; }
   // 엔딩 다음 현황·크레딧은 DOM 리포트가 캔버스를 덮음 → draw는 noLoop로 멈춤(showReport)
 
   if (phase === 'countdown') stepCountdown();
@@ -160,9 +177,17 @@ function draw() {
   if (phase === 'win' || phase === 'lose') drawEndCard();
 }
 
-// 세로/가로 판별 (orientation 변경 즉시 반영되도록 window 값 직접 사용)
-function isPortrait() {
-  return window.innerHeight > window.innerWidth;
+// 세로 뷰포트일 때만 캔버스를 90° 회전 (논리 가로 좌표 → 물리 세로 캔버스)
+function applyOrientation() {
+  if (!ROT) return;
+  translate(VW, 0);
+  rotate(HALF_PI);
+}
+
+// 물리 입력 좌표(px,py) → 논리 가로 좌표 (회전 중일 때 역변환)
+function toLogical(px, py) {
+  if (!ROT) return { x: px, y: py };
+  return { x: py, y: VW - px };
 }
 
 // ---------- step ----------
@@ -339,7 +364,6 @@ function openingBox() {
 }
 
 function drawTitleScreen() {
-  if (isPortrait()) { drawRotateHint(); return; }  // 가로로 돌리도록 유도
   background(OPEN_BG[0], OPEN_BG[1], OPEN_BG[2]);
   if (titleSlide === 0) drawSlideHero();
   else if (titleSlide === 1) drawSlideLanding();
@@ -488,24 +512,6 @@ function drawSlideHint() {
     textSize(0.026 * b.bh);
     text('탭하여 계속  ▶', W / 2, yy - 30 * b.sc);
   }
-}
-
-// 세로로 들었을 때 게임을 멈추고 가로 회전 안내 (오프닝 회전 유도 겸용)
-function drawRotateHint() {
-  background(OPEN_BG[0], OPEN_BG[1], OPEN_BG[2]);
-  const k = Math.min(window.innerWidth, window.innerHeight) / 360;
-  push();
-  translate(W / 2, H / 2);
-  rotate(HALF_PI);
-  textAlign(CENTER, CENTER);
-  noStroke();
-  fill(255);
-  textSize(46 * k);
-  text('↻', 0, -50 * k);
-  textFont(FONTS.macho);
-  textSize(20 * k);
-  text('화면을 가로로 돌려주세요', 0, 10 * k);
-  pop();
 }
 
 // ---------- HUD ----------
@@ -760,7 +766,6 @@ function replayFromReport() {
 // ---------- input ----------
 function handlePress(mx, my) {
   if (phase === 'title') {
-    if (isPortrait()) return;                         // 세로면 먼저 가로로 돌리도록 무시
     if (titleSlide < TITLE_SLIDES - 1) titleSlide++;  // 다음 슬라이드로
     else startGame();                                 // 마지막 슬라이드 → 게임 시작
     return;
@@ -791,11 +796,17 @@ function handleRelease() {
   heldRest = false;
 }
 
-function mousePressed() { handlePress(mouseX, mouseY); return false; }
+function mousePressed() {
+  const p = toLogical(mouseX, mouseY);   // 회전 중이면 물리→논리 좌표 변환
+  handlePress(p.x, p.y);
+  return false;
+}
 function mouseReleased() { handleRelease(); return false; }
 function touchStarted() {
-  if (touches.length > 0) handlePress(touches[0].x, touches[0].y);
-  else handlePress(mouseX, mouseY);
+  let px = mouseX, py = mouseY;
+  if (touches.length > 0) { px = touches[0].x; py = touches[0].y; }
+  const p = toLogical(px, py);
+  handlePress(p.x, p.y);
   return false;
 }
 function touchEnded() { handleRelease(); return false; }
