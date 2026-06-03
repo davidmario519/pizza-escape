@@ -152,14 +152,14 @@ function resetGame() {
   lookMsg = '';
   apartmentRooms = [];
   titleSlide = 0;
-  textFont('sans-serif');  // 엔딩/아웃트로에서 바꾼 폰트 원복 (게임 텍스트는 기본 폰트)
+  textFont(FONTS.galmuri);  // 엔딩/아웃트로에서 바꾼 폰트 원복 (게임 텍스트는 갈무리)
 }
 
 // 오프닝 → 게임 시작 (카운트다운 진입)
 function startGame() {
   phase = 'countdown';
   countdownStart = millis();
-  textFont('sans-serif');  // 오프닝에서 바꾼 폰트 원복 (게임 텍스트는 기본 폰트 유지)
+  textFont(FONTS.galmuri);  // 오프닝에서 바꾼 폰트 원복 (게임 텍스트는 갈무리)
 }
 
 function draw() {
@@ -563,20 +563,21 @@ function drawHUD() {
 
 // ---------- buttons (우측 세로 패널) ----------
 function forwardBtn() {
-  // 앞으로 = 오른쪽(=문 방향)으로 직관 매핑, 엄지가 닿는 패널 하단의 큰 버튼
+  // 앞으로 = 오른쪽(=문 방향)으로 직관 매핑, 패널 위쪽의 큰 버튼
   const m = PANEL_W * 0.12;
   return {
     x: PANEL_LEFT + m,
-    y: H * 0.30,
+    y: H * 0.08,
     w: PANEL_W - m * 2,
     h: H * 0.42,
   };
 }
 function restBtn() {
+  // 잠시 쉬기 = 앞으로 가기 버튼 아래, 작게
   const m = PANEL_W * 0.12;
   return {
     x: PANEL_LEFT + m,
-    y: H * 0.06,
+    y: H * 0.60,
     w: PANEL_W - m * 2,
     h: H * 0.18,
   };
@@ -597,27 +598,29 @@ function drawButtons() {
   const rest = restBtn();
   textAlign(CENTER, CENTER);
 
-  // [잠시 쉬기] — 피자박스가 쌓인 모양 (패널 위쪽, 작게)
+  // [잠시 쉬기] — 일시정지 바(정지=휴식) + 작은 +박스 힌트 (쉬면 피자박스 1개 추가)
   fill(28, 24, 30);
-  rect(rest.x + 3 * S, rest.y + 5 * S, rest.w, rest.h, 8 * S);
+  rect(rest.x + 3 * S, rest.y + 5 * S, rest.w, rest.h, 8 * S);            // 그림자
   fill(heldRest ? 180 : 130, heldRest ? 150 : 125, 130);
-  rect(rest.x, rest.y, rest.w, rest.h, 8 * S);
+  rect(rest.x, rest.y, rest.w, rest.h, 8 * S);                           // 몸체
+  fill(255, 255, 255, 55);
+  rect(rest.x + 8 * S, rest.y + 6 * S, rest.w - 16 * S, 5 * S, 4 * S);   // 상단 하이라이트(앞으로 버튼과 통일감)
+
   push();
-  translate(rest.x + rest.w / 2 - 26 * S, rest.y + rest.h / 2 - 14 * S);
-  fill(200, 140, 80);
-  rect(2 * S, 14 * S, 50 * S, 9 * S);
-  rect(6 * S, 6 * S, 44 * S, 9 * S);
-  rect(10 * S, -2 * S, 38 * S, 9 * S);
-  fill(140, 80, 35);
-  rect(2 * S, 18 * S, 50 * S, 1 * S);
-  rect(6 * S, 10 * S, 44 * S, 1 * S);
-  rect(10 * S, 2 * S, 38 * S, 1 * S);
-  pop();
+  translate(rest.x + rest.w / 2, rest.y + rest.h * 0.38);
+  // 일시정지 바 ┃┃ — 옆 ▶(앞으로)와 함께 재생/정지 한 쌍으로 읽힘 (버튼 중앙 대칭)
+  const barW = 8 * S, barH = 24 * S, gap = 10 * S;
   fill(255);
+  rect(-gap / 2 - barW, -barH / 2, barW, barH, 2 * S);
+  rect(gap / 2,         -barH / 2, barW, barH, 2 * S);
+  pop();
+
+  fill(255);
+  textAlign(CENTER, CENTER);
   textSize(13 * S);
   text('잠시 쉬기', rest.x + rest.w / 2, rest.y + rest.h - 12 * S);
 
-  // [앞으로 가기] — 패널 아래쪽, 크게
+  // [앞으로 가기] — 패널 위쪽, 크게
   fill(40, 10, 15);
   rect(fwd.x + 3 * S, fwd.y + 6 * S, fwd.w, fwd.h, 12 * S);
   fill(220, 60, 70);
