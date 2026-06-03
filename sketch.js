@@ -17,6 +17,19 @@ let FONTS = {};
 // --- 이미지 에셋 --- (preload()에서 로드. 사용: image(IMAGES.logo, ...))
 let IMAGES = {};
 
+// --- 캐릭터 스프라이트 (한 장 시트에서 프레임만 잘라 그려 6장 개별 로드 대비 리소스 절약) ---
+// sprite-sheet-cut.png = 2250x646, 375x646 프레임 6칸. 0=서있기, 1~5=걷기. (배경 흰색→투명 처리본)
+const SPR_COLS = 6;          // 프레임 수: 0=서있기, 1~5=걷기
+const SPR_FW = 375;          // 프레임 한 칸 폭(px)
+const SPR_FH = 646;          // 프레임 한 칸 높이(px)
+const SPR_FEET = 0.967;      // 칸 안 발바닥 세로 위치 비율 (아래 여백 보정 → 발을 바닥선에 맞춤)
+const PLAYER_H_U = 120;      // 캐릭터 표시 높이 (디자인 단위, ×S)
+const WALK_FRAME_MS = 90;    // 걷기 프레임 전환 간격(ms)
+const WALK_BURST_MS = 360;   // '앞으로' 탭 1회당 걷기 애니메이션 지속(ms)
+// 피자박스가 쌓이는 지점 = 스프라이트 안 지게(등에 멘 나무 받침) 윗면 (측정값 기반)
+const RACK_TOP_RATIO = 0.79; // 지게 윗면 높이 = 발바닥에서 스프라이트 높이의 0.79 지점
+const RACK_DX_RATIO  = 0.20; // 박스를 캐릭터 중심에서 등(왼쪽)으로 옮기는 양 = 스프라이트 폭 × 0.20
+
 // --- 밸런스 수치 ---
 const AUTO_DRIFT_PER_SEC = 0.025;
 const FORWARD_PER_TAP = 0.020;
@@ -45,6 +58,7 @@ let boxCount = 0;
 let lastBoxDrop = 0;
 let boxFlashAt = -9999;
 let heldRest = false;
+let walkUntil = 0;                  // 이 시각(ms) 전까지 걷기 애니메이션 재생 ('앞으로' 탭이 갱신)
 let endShownAt = 0;
 let canvasEl = null;                // p5 캔버스 핸들 (리포트 표시 중 숨김)
 let titleSlide = 0;                 // 오프닝 슬라이드 (0=히어로,1=랜딩,2~4=How to Play)
@@ -72,6 +86,11 @@ function preload() {
   };
   IMAGES = {
     logo: loadImage('src/화면 UI/로고.png'),   // 히어로 메인 로고 (피자박스 + 워드마크)
+    walk: loadImage('src/캐릭터 스프라이트/sprite-sheet-cut.png'),  // 캐릭터 걷기 스프라이트 시트(배경 투명본)
+    // 게임 오브젝트 에셋 (디자인 PNG)
+    box:  loadImage('src/게임 오브젝트/피자박스(게임에 쌓이는).png'),          // 쌓이는 피자박스 (524x120, 불투명)
+    bed:  loadImage('src/게임 오브젝트/침대.png'),                              // 침대 (콘텐츠 bbox 87,112 1218x615)
+    door: loadImage('src/게임 오브젝트/문(제일 왼쪽에 닿으면 게임클리어.png'),  // 문 (콘텐츠 bbox 977,754 1253x3438)
   };
 }
 
@@ -127,6 +146,7 @@ function resetGame() {
   lastBoxDrop = 0;
   boxFlashAt = -9999;
   heldRest = false;
+  walkUntil = 0;
   usedLookAround = false;
   lookStart = 0;
   lookMsg = '';
@@ -244,14 +264,15 @@ function drawScene() {
   fill(45 + b * 30, 35 + b * 25, 70 + b * 30);
   rect(0, ROOM_BOTTOM - 30 * S, W, 30 * S);
 
-  drawBed(18 * S, ROOM_BOTTOM - 70 * S);
-  drawTrash(95 * S, ROOM_BOTTOM - 22 * S);
-  drawTrash(130 * S, ROOM_BOTTOM - 18 * S);
+  const floorY = ROOM_BOTTOM - 30 * S;   // 바닥선 (오브젝트·발이 닿는 높이)
 
-  drawDoor(PLAYER_RANGE_RIGHT + W * 0.04, ROOM_TOP + 20 * S, ROOM_BOTTOM - 30 * S);
+  // 문(우측 탈출구) → 침대(좌측, 매몰 존). 침대가 캐릭터 앞쪽이라 나중에 그림.
+  drawDoor(PLAYER_RANGE_RIGHT + W * 0.02, floorY, ROOM_TOP + 4 * S);
+  drawBed(6 * S, floorY + 14 * S);
 
   const px = lerp(PLAYER_RANGE_LEFT, PLAYER_RANGE_RIGHT, playerX);
-  const py = ROOM_BOTTOM - 30 * S;
+  const py = floorY;
+  drawPlayerShadow(px, py);   // 발밑 타원 그림자 (캐릭터 아래에 깔아 접지감)
   drawPlayer(px, py);
   drawBoxStack(px, py, boxCount);
 
@@ -262,77 +283,89 @@ function drawScene() {
   }
 }
 
-function drawBed(x, y) {
-  noStroke();
-  fill(70, 50, 60);
-  rect(x, y, 78 * S, 30 * S);
-  fill(150, 80, 95);
-  rect(x + 4 * S, y + 4 * S, 70 * S, 22 * S);
-  fill(230, 215, 230);
-  rect(x + 6 * S, y + 6 * S, 22 * S, 14 * S);
-  fill(120, 60, 75);
-  rect(x + 36 * S, y + 6 * S, 36 * S, 18 * S);
+// 침대(좌측 매몰 존). 디자인 PNG의 콘텐츠 bbox만 잘라 좌하단 기준으로 배치.
+function drawBed(leftX, bottomY) {
+  const img = IMAGES.bed;
+  const w = 150 * S;
+  const h = w * (615 / 1218);          // 에셋 종횡비 유지
+  if (img) {
+    noTint();
+    image(img, leftX, bottomY - h, w, h, 87, 112, 1218, 615);
+  } else {
+    noStroke(); fill(70, 50, 60); rect(leftX, bottomY - h, w, h);
+  }
 }
 
-function drawTrash(x, y) {
-  noStroke();
-  fill(60, 60, 60);
-  rect(x, y, 14 * S, 10 * S);
-  fill(80, 80, 80);
-  rect(x + 4 * S, y - 5 * S, 10 * S, 6 * S);
+// 문(우측 탈출구). 세로로 긴 PNG의 콘텐츠 bbox만 잘라 바닥에 세움.
+function drawDoor(centerX, floorY, topY) {
+  const img = IMAGES.door;
+  const h = floorY - topY;
+  const w = h * (1253 / 3438);         // 에셋 종횡비 유지
+  if (img) {
+    noTint();
+    image(img, centerX - w / 2, floorY - h, w, h, 977, 754, 1253, 3438);
+  } else {
+    noStroke(); fill(140, 240, 200); rect(centerX - w / 2, topY, w, h);
+  }
 }
 
-function drawDoor(x, yTop, yBottom) {
+// 발밑 접지 그림자 (타원). 걷는 중엔 발 구름에 맞춰 폭이 살짝 출렁인다.
+function drawPlayerShadow(x, footY) {
+  const baseW = PLAYER_H_U * S * (SPR_FW / SPR_FH) * 0.82;
+  const walking = phase === 'playing' && !heldRest && millis() < walkUntil;
+  const pulse = walking ? 1 + 0.08 * Math.sin(millis() / WALK_FRAME_MS) : 1;
   noStroke();
-  fill(100, 230, 180, 60);
-  rect(x - 6 * S, yTop, 16 * S, yBottom - yTop);
-  fill(140, 240, 200);
-  rect(x, yTop, 4 * S, yBottom - yTop);
+  fill(0, 80);
+  ellipse(x, footY - 1 * S, baseW * pulse, baseW * 0.26);
 }
 
+// 캐릭터 = 스프라이트 시트의 한 프레임. 한 장(IMAGES.walk)에서 현재 프레임 칸만
+// 잘라(source rect) 그린다 → 프레임마다 이미지를 따로 로드하지 않아 리소스 절약.
 function drawPlayer(x, y) {
-  noStroke();
-  fill(110, 75, 45);
-  rect(x - 10 * S, y - 38 * S, 4 * S, 34 * S);
-  rect(x - 12 * S, y - 8 * S, 10 * S, 4 * S);
-  fill(85, 55, 30);
-  rect(x - 11 * S, y - 6 * S, 8 * S, 2 * S);
-
-  fill(40, 35, 60);
-  rect(x - 6 * S, y - 8 * S, 4 * S, 8 * S);
-  rect(x + 1 * S, y - 8 * S, 4 * S, 8 * S);
-
-  fill(80, 90, 130);
-  rect(x - 7 * S, y - 22 * S, 13 * S, 16 * S);
-
-  fill(245, 220, 200);
-  rect(x - 5 * S, y - 32 * S, 11 * S, 11 * S);
-  fill(40, 30, 35);
-  rect(x - 5 * S, y - 32 * S, 11 * S, 5 * S);
-  rect(x - 5 * S, y - 28 * S, 2 * S, 3 * S);
-  rect(x + 4 * S, y - 28 * S, 2 * S, 3 * S);
-  fill(20);
-  rect(x + 3 * S, y - 26 * S, 2 * S, 2 * S);
+  const sheet = IMAGES.walk;
+  if (!sheet) return;                  // 아직 로드 전이면 건너뜀
+  const h = PLAYER_H_U * S;
+  const w = h * (SPR_FW / SPR_FH);
+  const top = y - h * SPR_FEET;        // 발바닥이 바닥선(y)에 닿도록 칸 아래 여백 보정
+  const sx = playerFrame() * SPR_FW;   // 시트에서 잘라낼 프레임의 가로 오프셋
+  noTint();
+  image(sheet, x - w / 2, top, w, h, sx, 0, SPR_FW, SPR_FH);
 }
 
+// 현재 보여줄 프레임: 0=서있기(멈춤·쉬는 중), 1~5=걷기(앞으로 탭 직후 순환)
+function playerFrame() {
+  if (phase !== 'playing' || heldRest) return 0;       // 카운트다운·엔딩·쉬기 = 서있기
+  if (millis() < walkUntil) {
+    return 1 + Math.floor(millis() / WALK_FRAME_MS) % (SPR_COLS - 1);  // 1..5 순환
+  }
+  return 0;
+}
+
+// 지게(등에 멘 나무 받침) 윗면·머리 뒤쪽에 쌓이는 피자박스 더미. 박스 1장 = 디자인 PNG(IMAGES.box).
 function drawBoxStack(x, baseY, count) {
   if (count === 0) return;
+  const img = IMAGES.box;
   const flash = millis() - boxFlashAt < 400;
   const topIdx = count - 1;
+  // 스프라이트 그려지는 크기(= drawPlayer와 동일) 기준으로 지게 윗면 위치 산출
+  const h = PLAYER_H_U * S;
+  const w = h * (SPR_FW / SPR_FH);
+  const rackTopY = baseY - RACK_TOP_RATIO * h;   // 지게 윗면(박스가 얹히는 높이)
+  const rackCx = x - RACK_DX_RATIO * w;          // 캐릭터 중심에서 등(왼쪽)으로
+  const bw = 40 * S;
+  const bh = bw * (120 / 524);          // 에셋 종횡비 유지 (가로로 납작)
+  const step = bh * 0.82;               // 살짝 겹쳐 쌓기
   for (let i = 0; i < count; i++) {
-    const bx = x - 16 * S;
-    const by = baseY - 42 * S - i * 9 * S;
-    const isTop = i === topIdx;
-    let c = color(200, 140, 80);
-    if (isTop && flash && Math.floor(millis() / 80) % 2 === 0) {
-      c = color(255, 230, 160);
+    const bx = rackCx - bw / 2;
+    const by = rackTopY + 2 * S - bh - i * step;  // 맨 아래 박스가 지게에 얹히게 (+2 살짝 겹침)
+    noTint();
+    if (img) image(img, bx, by, bw, bh);
+    else { noStroke(); fill(200, 140, 80); rect(bx, by, bw, bh); }
+    // 새 박스가 떨어진 직후 맨 위 박스를 반짝
+    if (i === topIdx && flash && Math.floor(millis() / 80) % 2 === 0) {
+      noStroke(); fill(255, 240, 150, 150);
+      rect(bx, by, bw, bh);
     }
-    noStroke();
-    fill(c);
-    rect(bx, by, 18 * S, 9 * S);
-    fill(140, 80, 35);
-    rect(bx, by + 4 * S, 18 * S, 1 * S);
-    rect(bx + 8 * S, by, 1 * S, 9 * S);
   }
 }
 
@@ -868,6 +901,7 @@ function handlePress(mx, my) {
     enterLookaround();
   } else if (inRect(mx, my, forwardBtn())) {
     playerX += FORWARD_PER_TAP / (1 + boxCount * BOX_PENALTY);
+    walkUntil = millis() + WALK_BURST_MS;   // 앞으로 한 발 → 걷기 애니메이션 트리거
   } else if (inRect(mx, my, restBtn())) {
     heldRest = true;
   }
