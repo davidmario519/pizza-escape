@@ -563,21 +563,21 @@ function drawHUD() {
 
 // ---------- buttons (우측 세로 패널) ----------
 function forwardBtn() {
-  // 앞으로 = 오른쪽(=문 방향)으로 직관 매핑, 패널 위쪽의 큰 버튼
+  // 앞으로 = 오른쪽(=문 방향)으로 직관 매핑, 하단 정렬 스택의 위쪽 큰 버튼
   const m = PANEL_W * 0.12;
   return {
     x: PANEL_LEFT + m,
-    y: H * 0.08,
+    y: H * 0.32,
     w: PANEL_W - m * 2,
     h: H * 0.42,
   };
 }
 function restBtn() {
-  // 잠시 쉬기 = 앞으로 가기 버튼 아래, 작게
+  // 잠시 쉬기 = 앞으로 가기 버튼 아래, 화면 바닥에 붙는 작은 버튼
   const m = PANEL_W * 0.12;
   return {
     x: PANEL_LEFT + m,
-    y: H * 0.60,
+    y: H * 0.78,
     w: PANEL_W - m * 2,
     h: H * 0.18,
   };
@@ -620,7 +620,7 @@ function drawButtons() {
   textSize(13 * S);
   text('잠시 쉬기', rest.x + rest.w / 2, rest.y + rest.h - 12 * S);
 
-  // [앞으로 가기] — 패널 위쪽, 크게
+  // [앞으로 가기] — 하단 스택의 위쪽, 크게
   fill(40, 10, 15);
   rect(fwd.x + 3 * S, fwd.y + 6 * S, fwd.w, fwd.h, 12 * S);
   fill(220, 60, 70);
