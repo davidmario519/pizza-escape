@@ -89,6 +89,9 @@ function setup() {
 function windowResized() {
   recomputeLayout();
   resizeCanvas(VW, VH);
+  // 리포트가 떠 있는 동안의 방향 전환 → 가로 맞춤을 다시 적용 (draw는 noLoop 상태라 여기서)
+  const r = document.getElementById('report');
+  if (r && r.classList.contains('show')) layoutReport();
 }
 
 // 뷰포트 크기로부터 레이아웃 좌표·스케일을 재계산 (가로 모드 기준)
@@ -714,6 +717,10 @@ function drawEndCard() {
 // 피자 은유 → 한국 은둔고립 현황 통계/그래프 → 프로젝트 설명 → 인용 → 크레딧 → 리플레이.
 // 캔버스가 아닌 index.html의 #report 오버레이로 렌더(긴 본문·링크·로고·스크롤은 DOM이 적합).
 
+// 리포트 슬라이드 덱 상태
+let reportIndex = 0;     // 현재 보고 있는 슬라이드
+let reportSlides = 0;    // 전체 슬라이드 수 (setupReport에서 DOM 기준 계산)
+
 // 그래프 데이터 — '다른 사람들로부터 고립되어 있다고 느낀 기간' (한국청소년정책연구원/KOSIS)
 // ⚠ 아래는 예시(placeholder) 수치. 실제 KOSIS 값으로 교체할 것.
 const LONELINESS_DATA = [
@@ -724,8 +731,9 @@ const LONELINESS_DATA = [
   { label: '1년 이상',  value: 8 },
 ];
 
-// setup()에서 1회: 그래프 막대 렌더 + 리플레이 버튼 클릭 바인딩
+// setup()에서 1회: 그래프 막대 렌더 + 슬라이드 네비게이션/리플레이 버튼 바인딩
 function setupReport() {
+  // 그래프 막대 (높이는 CSS가 --ru·--barfrac으로 계산 → 회전/리사이즈에 자동 대응)
   const host = document.getElementById('report-chart');
   if (host) {
     const maxV = Math.max(...LONELINESS_DATA.map(d => d.value));
@@ -734,22 +742,95 @@ function setupReport() {
       const col = document.createElement('div'); col.className = 'bar-col';
       const val = document.createElement('div'); val.className = 'bar-val'; val.textContent = d.value + '%';
       const bar = document.createElement('div'); bar.className = 'bar';
-      bar.style.height = (d.value / maxV * 22) + 'vmin';   // 최대 막대 = 22vmin
+      bar.style.setProperty('--barfrac', d.value / maxV);
       const lab = document.createElement('div'); lab.className = 'bar-label'; lab.textContent = d.label;
       col.appendChild(val); col.appendChild(bar); col.appendChild(lab);
       host.appendChild(col);
     }
   }
+
+  // 슬라이드 수 + 진행 점 생성
+  reportSlides = document.querySelectorAll('#report .report-slide').length;
+  const dots = document.getElementById('report-dots');
+  if (dots) {
+    dots.innerHTML = '';
+    for (let i = 0; i < reportSlides; i++) {
+      const dot = document.createElement('button');
+      dot.className = 'dot'; dot.type = 'button';
+      dot.setAttribute('aria-label', (i + 1) + '번째 슬라이드로');
+      dot.addEventListener('click', () => goReportSlide(i));
+      dots.appendChild(dot);
+    }
+  }
+
+  // 화살표
+  const prev = document.getElementById('report-prev');
+  const next = document.getElementById('report-next');
+  if (prev) prev.addEventListener('click', () => goReportSlide(reportIndex - 1));
+  if (next) next.addEventListener('click', () => goReportSlide(reportIndex + 1));
+
+  // 슬라이드 빈 영역 탭 → 다음으로 (오프닝과 동일한 감각, 링크·버튼은 각자 동작)
+  const track = document.getElementById('report-track');
+  if (track) {
+    track.addEventListener('click', (e) => {
+      if (e.target.closest('a, button')) return;
+      if (reportIndex < reportSlides - 1) goReportSlide(reportIndex + 1);
+    });
+  }
+
+  // 리플레이 버튼 (탭 전파 막아 슬라이드 넘김과 충돌 방지)
   const btn = document.getElementById('report-replay');
-  if (btn) btn.addEventListener('click', replayFromReport);
+  if (btn) btn.addEventListener('click', (e) => { e.stopPropagation(); replayFromReport(); });
 }
 
-// 엔딩 메시지 탭 → 리포트 오버레이 표시 (캔버스 숨기고 draw 정지)
+// 슬라이드 이동 (translateX) + 점/화살표 상태 갱신
+function goReportSlide(i) {
+  reportIndex = Math.max(0, Math.min(i, reportSlides - 1));
+  const track = document.getElementById('report-track');
+  if (track) track.style.transform = 'translateX(' + (-reportIndex * 100) + '%)';
+  document.querySelectorAll('#report-dots .dot')
+    .forEach((d, k) => d.classList.toggle('active', k === reportIndex));
+  const prev = document.getElementById('report-prev');
+  const next = document.getElementById('report-next');
+  if (prev) prev.disabled = (reportIndex === 0);
+  if (next) next.disabled = (reportIndex === reportSlides - 1);
+}
+
+// 리포트를 가로(슬라이드)로 맞춘다. 세로 기기는 게임 캔버스처럼 90° 회전해 가로로 표시.
+// vh/vw는 회전 시 실제 뷰포트 기준이라 어긋나므로 슬라이드 자체 크기를 --rw/--rh/--ru로 내려준다.
+function layoutReport() {
+  const r = document.getElementById('report');
+  if (!r) return;
+  const rw = ROT ? VH : VW;   // 슬라이드가 차지하는 '논리 가로'
+  const rh = ROT ? VW : VH;   // '논리 세로'
+  r.style.setProperty('--rw', rw + 'px');
+  r.style.setProperty('--rh', rh + 'px');
+  r.style.setProperty('--ru', Math.min(rw, rh) + 'px');
+  if (ROT) {
+    // 캔버스 회전과 동일 방향(시계 90°): 논리 가로 → 세로 뷰포트
+    r.style.width = rw + 'px';
+    r.style.height = rh + 'px';
+    r.style.top = '0px'; r.style.left = '0px';
+    r.style.right = 'auto'; r.style.bottom = 'auto';
+    r.style.transformOrigin = 'left top';
+    r.style.transform = 'translate(' + VW + 'px, 0) rotate(90deg)';
+  } else {
+    // 가로 기기: inset:0 으로 화면 가득 (인라인 스타일 해제)
+    r.style.width = ''; r.style.height = '';
+    r.style.top = ''; r.style.left = '';
+    r.style.right = ''; r.style.bottom = '';
+    r.style.transformOrigin = ''; r.style.transform = '';
+  }
+}
+
+// 엔딩 메시지 탭 → 리포트 오버레이 표시 (캔버스 숨기고 draw 정지, 첫 슬라이드부터)
 function showReport() {
   const r = document.getElementById('report');
   if (!r) { resetGame(); return; }   // 안전장치: 오버레이가 없으면 바로 재시작
+  layoutReport();
+  goReportSlide(0);
   r.classList.add('show');
-  r.scrollTop = 0;
+  r.setAttribute('aria-hidden', 'false');
   if (canvasEl) canvasEl.hide();
   noLoop();
 }
@@ -757,7 +838,7 @@ function showReport() {
 // 리포트의 [게임 리플레이하기] → 오버레이 숨기고 게임 재시작(카운트다운부터)
 function replayFromReport() {
   const r = document.getElementById('report');
-  if (r) r.classList.remove('show');
+  if (r) { r.classList.remove('show'); r.setAttribute('aria-hidden', 'true'); }
   if (canvasEl) canvasEl.show();
   resetGame();
   loop();
@@ -796,20 +877,30 @@ function handleRelease() {
   heldRest = false;
 }
 
+// 리포트(DOM 오버레이)가 떠 있으면 p5 입력 핸들러는 손대지 않는다.
+// p5 터치 리스너는 window에 붙어 캔버스를 숨겨도 발동하는데, return false 시
+// preventDefault가 걸려 '탭→click 합성'이 취소돼 슬라이드 탭이 먹통이 된다 → 기본 동작 허용.
+function reportIsOpen() {
+  const r = document.getElementById('report');
+  return !!(r && r.classList.contains('show'));
+}
+
 function mousePressed() {
+  if (reportIsOpen()) return;            // 리포트 슬라이드/버튼 클릭은 DOM이 처리
   const p = toLogical(mouseX, mouseY);   // 회전 중이면 물리→논리 좌표 변환
   handlePress(p.x, p.y);
   return false;
 }
-function mouseReleased() { handleRelease(); return false; }
+function mouseReleased() { if (reportIsOpen()) return; handleRelease(); return false; }
 function touchStarted() {
+  if (reportIsOpen()) return;            // 탭→click 합성을 막지 않도록 preventDefault 회피
   let px = mouseX, py = mouseY;
   if (touches.length > 0) { px = touches[0].x; py = touches[0].y; }
   const p = toLogical(px, py);
   handlePress(p.x, p.y);
   return false;
 }
-function touchEnded() { handleRelease(); return false; }
+function touchEnded() { if (reportIsOpen()) return; handleRelease(); return false; }
 
 // ---------- 둘러보기 (아파트뷰 연출) ----------
 function lookBtnVisible() {

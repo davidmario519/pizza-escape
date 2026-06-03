@@ -13,54 +13,89 @@
   </head>
 
   <body>
-    <!-- 엔딩 다음 현황·크레딧 리포트 (part 3) — p5가 showReport()로 토글 -->
+    <!-- 엔딩 다음 현황·크레딧 리포트 (part 3) — 가로 슬라이드 덱, p5가 showReport()로 토글 -->
     <section id="report" aria-hidden="true">
-      <div class="report-inner">
+      <div class="report-track" id="report-track">
 
-        <!-- 현황: 핵심 수치 -->
-        <p class="kicker">한국의 은둔·고립 현황</p>
-        <h1 class="stat"><em>34%</em></h1>
-        <p class="stat-sub">한국 청년의 약 3명 중 1명은 <strong>자주 외로움을 느낍니다.</strong></p>
+        <!-- 슬라이드 1 · 현황 핵심 수치 -->
+        <article class="report-slide">
+          <div class="slide-body center">
+            <p class="kicker">한국의 은둔·고립 현황</p>
+            <h1 class="stat"><em>34%</em></h1>
+            <p class="stat-sub">한국 청년의 약 3명 중 1명은 <strong>자주 외로움을 느낍니다.</strong></p>
+          </div>
+        </article>
 
-        <!-- 그래프 -->
-        <div class="chart-card">
-          <p class="chart-title">다른 사람들로부터 고립되어 있다고 느낀 기간</p>
-          <div class="chart-bars" id="report-chart"></div>
-          <p class="chart-note">출처: 한국청소년정책연구원 「아동·청소년인권실태조사」(2025), KOSIS.<br>※ 예시 수치 — 실제 KOSIS 데이터로 교체 필요.</p>
-        </div>
+        <!-- 슬라이드 2 · 그래프 -->
+        <article class="report-slide">
+          <div class="slide-body">
+            <div class="chart-card">
+              <p class="chart-title">다른 사람들로부터 고립되어 있다고 느낀 기간</p>
+              <div class="chart-bars" id="report-chart"></div>
+              <p class="chart-note">출처: 한국청소년정책연구원 「아동·청소년인권실태조사」(2025), KOSIS.<br>※ 예시 수치 — 실제 KOSIS 데이터로 교체 필요.</p>
+            </div>
+          </div>
+        </article>
 
-        <!-- 프로젝트 설명 -->
-        <div class="block">
-          <p>피자는 언제든 편하게 배달해 먹는 음식 중 하나이지만, 은둔고립자는 이 편리함이 방에 쌓이는 쓰레기로 변하는 경험을 합니다.</p>
-          <p>이 프로젝트는 피자 박스를 마음속 자리한 외로움의 부피로 은유하여, 평범한 일상 속 외로움이 은둔고립과 얼마나 가까운지 전달하는 공공 캠페인입니다.</p>
-          <p>우리는 사회가 요구하는 기대치에 부응하지 못할 때 외로움을 느끼며, 한국 청년의 34%는 자주 외로움을 느낀다는 연구 결과를 바탕으로 질문합니다.</p>
-          <p class="question">“내가 느끼는 심적 부담은 진정 나의 것인가,<br>혹은 내가 속한 사회의 것인가?”</p>
-        </div>
+        <!-- 슬라이드 3 · 프로젝트 설명 -->
+        <article class="report-slide">
+          <div class="slide-body">
+            <div class="block">
+              <p>피자는 언제든 편하게 배달해 먹는 음식 중 하나이지만, 은둔고립자는 이 편리함이 방에 쌓이는 쓰레기로 변하는 경험을 합니다.</p>
+              <p>이 프로젝트는 피자 박스를 마음속 자리한 외로움의 부피로 은유하여, 평범한 일상 속 외로움이 은둔고립과 얼마나 가까운지 전달하는 공공 캠페인입니다.</p>
+              <p>우리는 사회가 요구하는 기대치에 부응하지 못할 때 외로움을 느끼며, 한국 청년의 34%는 자주 외로움을 느낀다는 연구 결과를 바탕으로 질문합니다.</p>
+            </div>
+          </div>
+        </article>
 
-        <!-- 인용 -->
-        <div class="block refs">
-          <p class="block-title">인용</p>
-          <p>Seo, Young Seok, Soo Jung Ahn, Hyun Jin Kim, and Sein Ko. 2020. “Review on the Conceptual Definition and Measurement of Loneliness Experienced among Koreans.” <i>Korean Journal of Psychology</i> 39 (2): 205–247. <a href="https://doi.org/10.22257/kjp.2020.6.39.2.205" target="_blank" rel="noopener">doi.org/10.22257/kjp.2020.6.39.2.205</a></p>
-          <p>Song, Inmyung. 2025. “Correlates of Loneliness and Social Isolation Among Korean Adults.” <i>National Library of Medicine</i> 13 (3): 806. <a href="https://doi.org/10.3390/healthcare13070806" target="_blank" rel="noopener">doi.org/10.3390/healthcare13070806</a></p>
-          <p>한국청소년정책연구원. 「아동·청소년인권실태조사」. 2025. 그래프 “다른 사람들로부터 고립되어 있다고 느낀 기간”. KOSIS. Accessed May 31, 2026. <a href="http://kosis.kr/statHtml/statHtml.do?orgId=402&tblId=DT_ES2017_065&tmprScrId=20260531174901983_c6b9503325b0465f" target="_blank" rel="noopener">kosis.kr</a></p>
-        </div>
+        <!-- 슬라이드 4 · 질문 -->
+        <article class="report-slide">
+          <div class="slide-body center">
+            <p class="question">“내가 느끼는 심적 부담은 진정 나의 것인가,<br>혹은 내가 속한 사회의 것인가?”</p>
+          </div>
+        </article>
 
-        <!-- 크레딧 -->
-        <div class="block credits">
-          <p class="block-title">크레딧</p>
-          <p class="team">팀 포스트히키코모리</p>
-          <p class="names">설혜인 · 이세용 · 윤기완 · 윤지수</p>
-          <p class="affil">서강대학교 Art &amp; Technology</p>
-          <p class="affil">With Kakao Impact &amp; 안무서운회사</p>
-        </div>
+        <!-- 슬라이드 5 · 인용 -->
+        <article class="report-slide">
+          <div class="slide-body">
+            <div class="block refs">
+              <p class="block-title">인용</p>
+              <p>Seo, Young Seok, Soo Jung Ahn, Hyun Jin Kim, and Sein Ko. 2020. “Review on the Conceptual Definition and Measurement of Loneliness Experienced among Koreans.” <i>Korean Journal of Psychology</i> 39 (2): 205–247. <a href="https://doi.org/10.22257/kjp.2020.6.39.2.205" target="_blank" rel="noopener">doi.org/10.22257/kjp.2020.6.39.2.205</a></p>
+              <p>Song, Inmyung. 2025. “Correlates of Loneliness and Social Isolation Among Korean Adults.” <i>National Library of Medicine</i> 13 (3): 806. <a href="https://doi.org/10.3390/healthcare13070806" target="_blank" rel="noopener">doi.org/10.3390/healthcare13070806</a></p>
+              <p>한국청소년정책연구원. 「아동·청소년인권실태조사」. 2025. 그래프 “다른 사람들로부터 고립되어 있다고 느낀 기간”. KOSIS. Accessed May 31, 2026. <a href="http://kosis.kr/statHtml/statHtml.do?orgId=402&tblId=DT_ES2017_065&tmprScrId=20260531174901983_c6b9503325b0465f" target="_blank" rel="noopener">kosis.kr</a></p>
+            </div>
+          </div>
+        </article>
 
-        <!-- 피날레: 로고 + 리플레이 -->
-        <div class="finale">
-          <img class="finale-logo" src="src/화면 UI/로고.png" alt="피자 이스케이프">
-          <button id="report-replay" type="button">▶ 게임 리플레이하기</button>
-        </div>
+        <!-- 슬라이드 6 · 크레딧 -->
+        <article class="report-slide">
+          <div class="slide-body center">
+            <div class="block credits">
+              <p class="block-title">크레딧</p>
+              <p class="team">팀 포스트히키코모리</p>
+              <p class="names">설혜인 · 이세용 · 윤기완 · 윤지수</p>
+              <p class="affil">서강대학교 Art &amp; Technology</p>
+              <p class="affil">With Kakao Impact &amp; 안무서운회사</p>
+            </div>
+          </div>
+        </article>
+
+        <!-- 슬라이드 7 · 피날레 (로고 + 리플레이) -->
+        <article class="report-slide">
+          <div class="slide-body center">
+            <div class="finale">
+              <img class="finale-logo" src="src/화면 UI/로고.png" alt="피자 이스케이프">
+              <button id="report-replay" type="button">▶ 게임 리플레이하기</button>
+            </div>
+          </div>
+        </article>
 
       </div>
+
+      <!-- 슬라이드 네비게이션 (화살표 + 진행 점) -->
+      <button class="report-nav prev" id="report-prev" type="button" aria-label="이전 슬라이드">‹</button>
+      <button class="report-nav next" id="report-next" type="button" aria-label="다음 슬라이드">›</button>
+      <div class="report-dots" id="report-dots"></div>
     </section>
 
     <script src="sketch.js"></script>

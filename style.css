@@ -36,51 +36,102 @@ canvas {
   display: block;
 }
 
-/* ---------- 현황·크레딧 리포트 오버레이 (part 3) ---------- */
+/* ---------- 현황·크레딧 리포트 오버레이 (part 3) — 가로 슬라이드 덱 ---------- */
+/* 네이티브 스크롤을 쓰지 않고 슬라이드(translateX)로 넘긴다 → 폰 스크롤 버그 회피.
+   세로 기기에서는 게임 캔버스처럼 90° 회전(layoutReport)해 가로로 보여 회전을 유도한다.
+   회전 시 vh/vw가 '실제 뷰포트' 기준이라 어긋나므로, 폰트·간격은 JS가 갱신하는
+   --rw/--rh/--ru(슬라이드 자체 크기 px) 기준 calc()로 잡는다. */
 #report {
+  --rw: 100vw;                          /* 슬라이드 논리 가로(px) — JS가 갱신 */
+  --rh: 100vh;                          /* 슬라이드 논리 세로(px) */
+  --ru: min(100vw, 100vh);             /* 반응형 단위(짧은 변) — 폰트/간격 기준 */
   position: fixed;
   inset: 0;
   z-index: 10;
   display: none;
   background: #04216c;                 /* 오프닝과 동일한 네이비 */
   color: #fff;
-  overflow-y: auto;
-  overflow-x: hidden;
-  touch-action: pan-y;                 /* 세로 스크롤 허용 (body는 none) */
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;                    /* 네이티브 스크롤 제거 → 슬라이드로 넘김 */
+  touch-action: manipulation;
   font-family: 'NexonGothic', -apple-system, "Noto Sans KR", sans-serif;
-  line-height: 1.7;
+  line-height: 1.6;
 }
 #report.show { display: block; }
 
-.report-inner {
-  max-width: 780px;
-  margin: 0 auto;
-  padding: 9vmin 7vw 16vmin;
+/* 슬라이드 트랙 — 가로로 늘어선 슬라이드를 translateX로 넘긴다 */
+.report-track {
+  display: flex;
+  flex-wrap: nowrap;
+  width: 100%;
+  height: 100%;
+  transition: transform .42s cubic-bezier(.4, 0, .2, 1);
+  will-change: transform;
 }
+.report-slide {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  display: flex;                       /* 자식 margin:auto 로 수직·수평 중앙 */
+  padding: calc(var(--rh) * .07) calc(var(--rw) * .08);
+  overflow-y: auto;                    /* 안전망: 내용이 넘치면 그 슬라이드만 스크롤 */
+  -webkit-overflow-scrolling: touch;
+}
+.slide-body { width: 100%; max-width: 760px; margin: auto; }
+.slide-body.center { text-align: center; }
 
+/* 네비게이션 화살표 */
+.report-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: clamp(38px, calc(var(--ru) * .085), 56px);
+  height: clamp(38px, calc(var(--ru) * .085), 56px);
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .12);
+  color: #fff;
+  font-size: clamp(20px, calc(var(--ru) * .05), 34px);
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 3;
+  transition: background .12s, opacity .2s;
+}
+.report-nav.prev { left: calc(var(--rw) * .03); }
+.report-nav.next { right: calc(var(--rw) * .03); }
+.report-nav:hover { background: rgba(255, 255, 255, .22); }
+.report-nav:active { background: rgba(255, 255, 255, .3); }
+.report-nav[disabled] { opacity: 0; pointer-events: none; }
+
+/* 진행 점 */
+.report-dots {
+  position: absolute;
+  bottom: calc(var(--rh) * .045);
+  left: 0; right: 0;
+  display: flex; gap: 9px; justify-content: center;
+  z-index: 3;
+}
+.report-dots .dot {
+  width: 9px; height: 9px;
+  padding: 0; border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .3);
+  cursor: pointer;
+  transition: background .2s, transform .2s;
+}
+.report-dots .dot.active { background: #fff; transform: scale(1.25); }
+
+/* ----- 슬라이드 내용 (폰트·간격은 --ru 기준, 간격은 em 위주) ----- */
 #report .kicker {
-  font-size: clamp(13px, 2.4vmin, 18px);
+  font-size: clamp(12px, calc(var(--ru) * .024), 17px);
   letter-spacing: .12em;
   color: #9fb2ec;
-  margin-bottom: .6em;
+  margin-bottom: .8em;
 }
-#report .stat {
-  font-family: 'EFMacho', sans-serif;
-  line-height: 1;
-  margin-bottom: .25em;
-}
-#report .stat em {
-  font-style: normal;
-  font-size: clamp(64px, 18vmin, 150px);
-  color: #fff;
-}
-#report .stat-sub {
-  font-size: clamp(16px, 3vmin, 24px);
-  color: #dde4f7;
-  margin-bottom: 9vmin;
-}
+#report .stat { font-family: 'EFMacho', sans-serif; line-height: 1; margin-bottom: .18em; }
+#report .stat em { font-style: normal; font-size: clamp(64px, calc(var(--ru) * .2), 150px); color: #fff; }
+#report .stat-sub { font-size: clamp(15px, calc(var(--ru) * .03), 23px); color: #dde4f7; }
 #report .stat-sub strong { color: #fff; font-weight: 700; }
 
 /* 그래프 카드 */
@@ -88,113 +139,65 @@ canvas {
   background: rgba(255, 255, 255, .06);
   border: 1px solid rgba(255, 255, 255, .14);
   border-radius: 16px;
-  padding: 6vmin 5vmin 5vmin;
-  margin-bottom: 9vmin;
+  padding: calc(var(--ru) * .05) calc(var(--ru) * .045);
 }
 .chart-title {
-  font-size: clamp(14px, 2.7vmin, 20px);
+  font-size: clamp(13px, calc(var(--ru) * .027), 20px);
   font-weight: 700;
-  margin-bottom: 5vmin;
+  text-align: center;
+  margin-bottom: calc(var(--ru) * .05);
   color: #eef2fd;
 }
-.chart-bars {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 2.5%;
-}
-.bar-col {
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.bar-val {
-  font-size: clamp(11px, 2.4vmin, 17px);
-  font-weight: 700;
-  color: #9fb2ec;
-  margin-bottom: 1vmin;
-}
+.chart-bars { display: flex; align-items: flex-end; justify-content: space-between; gap: 2.5%; }
+.bar-col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; }
+.bar-val { font-size: clamp(11px, calc(var(--ru) * .024), 17px); font-weight: 700; color: #9fb2ec; margin-bottom: .5em; }
 .bar {
   width: 64%;
   min-height: 3px;
+  height: calc(var(--ru) * .26 * var(--barfrac, 0));   /* --barfrac = value/max (JS) */
   background: linear-gradient(180deg, #9fb6ff, #3f63ff);
   border-radius: 6px 6px 0 0;
 }
-.bar-label {
-  margin-top: 1.4vmin;
-  font-size: clamp(10px, 2.1vmin, 15px);
-  color: #cdd6f0;
-  text-align: center;
-  line-height: 1.25;
-}
-.chart-note {
-  margin-top: 4vmin;
-  font-size: clamp(10px, 1.9vmin, 13px);
-  color: #8b9bc9;
-  line-height: 1.6;
-}
+.bar-label { margin-top: .6em; font-size: clamp(10px, calc(var(--ru) * .021), 15px); color: #cdd6f0; text-align: center; line-height: 1.25; }
+.chart-note { margin-top: calc(var(--ru) * .04); font-size: clamp(10px, calc(var(--ru) * .019), 13px); color: #8b9bc9; line-height: 1.55; text-align: center; }
 
 /* 본문 블록 */
-#report .block { margin-bottom: 9vmin; }
-#report .block p {
-  font-size: clamp(14px, 2.5vmin, 19px);
-  color: #e6ebfa;
-  margin-bottom: 1em;
-}
+#report .block p { font-size: clamp(14px, calc(var(--ru) * .025), 19px); color: #e6ebfa; margin-bottom: 1em; }
+#report .block p:last-child { margin-bottom: 0; }
 #report .block-title {
   font-family: 'EFMacho', sans-serif;
-  font-size: clamp(16px, 3vmin, 22px);
+  font-size: clamp(15px, calc(var(--ru) * .03), 22px);
   color: #9fb2ec;
-  margin-bottom: 1.2em;
+  margin-bottom: 1.1em;
   letter-spacing: .04em;
 }
 #report .question {
   font-family: 'EFMacho', sans-serif;
-  font-size: clamp(18px, 3.6vmin, 28px);
+  font-size: clamp(18px, calc(var(--ru) * .04), 30px);
   color: #fff;
-  line-height: 1.5;
-  margin-top: 1.4em;
+  line-height: 1.55;
 }
 
 /* 인용 */
-#report .refs p {
-  font-size: clamp(11px, 2vmin, 14px);
-  color: #c1cae6;
-  line-height: 1.6;
-}
+#report .refs p { font-size: clamp(11px, calc(var(--ru) * .021), 14px); color: #c1cae6; line-height: 1.6; margin-bottom: 1em; }
+#report .refs p:last-child { margin-bottom: 0; }
 #report .refs a { color: #9fb6ff; word-break: break-all; }
 
 /* 크레딧 */
-#report .credits { text-align: center; }
-#report .credits .team {
-  font-family: 'EFMacho', sans-serif;
-  font-size: clamp(18px, 3.4vmin, 26px);
-  color: #fff;
-  margin-bottom: .3em;
-}
-#report .credits .names {
-  font-size: clamp(14px, 2.6vmin, 19px);
-  color: #dde4f7;
-  margin-bottom: 1.4em;
-}
-#report .credits .affil {
-  font-size: clamp(12px, 2.3vmin, 16px);
-  color: #aab8e0;
-  margin-bottom: .3em;
-}
+#report .credits .team { font-family: 'EFMacho', sans-serif; font-size: clamp(18px, calc(var(--ru) * .034), 26px); color: #fff; margin-bottom: .3em; }
+#report .credits .names { font-size: clamp(14px, calc(var(--ru) * .026), 19px); color: #dde4f7; margin-bottom: 1.2em; }
+#report .credits .affil { font-size: clamp(12px, calc(var(--ru) * .023), 16px); color: #aab8e0; margin-bottom: .3em; }
 
 /* 피날레: 로고 + 리플레이 버튼 */
-.finale { text-align: center; margin-top: 11vmin; }
 .finale-logo {
-  width: min(60vw, 320px);
+  width: clamp(150px, calc(var(--rw) * .4), 300px);
   height: auto;
   display: block;
-  margin: 0 auto 7vmin;
+  margin: 0 auto calc(var(--ru) * .06);
 }
 #report-replay {
   font-family: 'EFMacho', sans-serif;
-  font-size: clamp(16px, 3vmin, 22px);
+  font-size: clamp(16px, calc(var(--ru) * .032), 22px);
   color: #04216c;
   background: #fff;
   border: none;
