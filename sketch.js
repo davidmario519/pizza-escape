@@ -942,47 +942,59 @@ const LONELINESS_DATA = [
   { label: '3년<br>이상',    values: [15.4, 13.7, 14.8] },
 ];
 
-// 연도별 꺾은선 그래프(SVG). 네이비(#04216C)가 보이도록 밝은 패널 위에 그린다.
-function buildLineChartSVG() {
-  const D = LONELINESS_DATA, n = D.length;
-  const PL = 78, PR = 968, PT = 92, PB = 470, maxY = 50;   // 플롯 영역 + y축 최댓값(%)
-  const X = i => PL + (i / (n - 1)) * (PR - PL);
-  const Y = v => PB - (v / maxY) * (PB - PT);
-  let s = '<svg class="chart-svg" viewBox="0 0 1000 548" xmlns="http://www.w3.org/2000/svg">';
-  s += '<rect x="4" y="4" width="992" height="540" rx="16" fill="#eef1f8"/>';   // 밝은 패널
-  // y축 그리드 + 라벨
+// 연도별 묶음 막대 그래프(SVG). 네이비(#04216C)가 보이도록 밝은 패널 위에 그린다.
+// 모든 좌표가 정수 user-unit이라 하단 베이스라인(0%)에 막대가 정확히 얹히고 라벨도 중앙 정렬된다.
+function buildBarChartSVG() {
+  const D = LONELINESS_DATA, n = D.length, ny = LONELINESS_YEARS.length;
+  // 한 화면에 담기게 가로로 넓고 세로로 낮은 비율(1000×420)로 압축.
+  const PL = 78, PR = 968, PT = 58, PB = 352, maxY = 50;   // 플롯 영역 + y축 최댓값(%)
+  const plotH = PB - PT;
+  const slotW = (PR - PL) / n;                             // 구간 한 칸 폭
+  const groupW = slotW * 0.56;                             // 한 칸 안 막대 묶음 폭
+  const barGap = 7;
+  const barW = (groupW - barGap * (ny - 1)) / ny;          // 막대 1개 폭
+  const Y = v => PB - (v / maxY) * plotH;                  // 값 → y (베이스라인 PB 기준)
+  const slotCx = i => PL + (i + 0.5) * slotW;              // 구간 중심 x
+
+  let s = '<svg class="chart-svg" viewBox="0 0 1000 420" xmlns="http://www.w3.org/2000/svg">';
+  s += '<rect x="4" y="4" width="992" height="412" rx="14" fill="#eef1f8"/>';   // 밝은 패널
+  // y축 그리드 + 라벨 (0%는 베이스라인이라 진하게)
   for (let t = 0; t <= maxY; t += 10) {
-    const y = Y(t);
-    s += `<line x1="${PL}" y1="${y}" x2="${PR}" y2="${y}" stroke="#d6dcec" stroke-width="1.5"/>`;
-    s += `<text x="${PL - 12}" y="${y + 7}" text-anchor="end" font-size="21" fill="#6b7494">${t}</text>`;
+    const y = Y(t), base = (t === 0);
+    s += `<line x1="${PL}" y1="${y}" x2="${PR}" y2="${y}" stroke="${base ? '#9aa6c6' : '#dde3f0'}" stroke-width="${base ? 2 : 1.5}"/>`;
+    s += `<text x="${PL - 12}" y="${y + 6}" text-anchor="end" font-size="20" fill="#6b7494">${t}</text>`;
   }
-  // x축 구간 라벨 (2줄 가능)
+  // 막대 (구간마다 연도 3개, 베이스라인 PB에 얹힘)
   for (let i = 0; i < n; i++) {
-    const parts = D[i].label.split('<br>');
-    s += `<text x="${X(i)}" y="${PB + 36}" text-anchor="middle" font-size="21" fill="#3a4068">`;
-    parts.forEach((p, k) => s += `<tspan x="${X(i)}" dy="${k === 0 ? 0 : 25}">${p}</tspan>`);
-    s += '</text>';
+    const gx0 = slotCx(i) - groupW / 2;                    // 묶음 왼쪽
+    for (let yi = 0; yi < ny; yi++) {
+      const v = D[i].values[yi];
+      const x = gx0 + yi * (barW + barGap);
+      const h = (v / maxY) * plotH;
+      s += `<rect x="${x.toFixed(1)}" y="${(PB - h).toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${YEAR_COLORS[yi]}"><title>${LONELINESS_YEARS[yi]} · ${v}%</title></rect>`;
+    }
   }
-  // 연도별 꺾은선 + 점
-  for (let yi = 0; yi < LONELINESS_YEARS.length; yi++) {
-    const pts = D.map((d, i) => `${X(i)},${Y(d.values[yi])}`).join(' ');
-    s += `<polyline points="${pts}" fill="none" stroke="${YEAR_COLORS[yi]}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>`;
-    D.forEach((d, i) => s += `<circle cx="${X(i)}" cy="${Y(d.values[yi])}" r="6" fill="${YEAR_COLORS[yi]}" stroke="#fff" stroke-width="2"/>`);
+  // x축 구간 라벨 (구간 중심에 중앙 정렬, 2줄 가능)
+  for (let i = 0; i < n; i++) {
+    const parts = D[i].label.split('<br>'), cx = slotCx(i);
+    s += `<text x="${cx}" y="${PB + 28}" text-anchor="middle" font-size="20" fill="#3a4068">`;
+    parts.forEach((p, k) => s += `<tspan x="${cx}" dy="${k === 0 ? 0 : 23}">${p}</tspan>`);
+    s += '</text>';
   }
   // 범례 (밝은 패널 위 → 세 색 모두 또렷)
   let lx = PL;
   LONELINESS_YEARS.forEach((y, yi) => {
-    s += `<rect x="${lx}" y="24" width="22" height="22" rx="4" fill="${YEAR_COLORS[yi]}"/>`;
-    s += `<text x="${lx + 30}" y="41" font-size="23" fill="#39406a">${y}</text>`;
-    lx += 138;
+    s += `<rect x="${lx}" y="15" width="20" height="20" rx="4" fill="${YEAR_COLORS[yi]}"/>`;
+    s += `<text x="${lx + 28}" y="31" font-size="21" fill="#39406a">${y}</text>`;
+    lx += 132;
   });
   return s + '</svg>';
 }
 
-// setup()에서 1회: 그래프(연도별 꺾은선) 렌더 + 슬라이드 네비게이션/리플레이 버튼 바인딩
+// setup()에서 1회: 그래프(연도별 묶음 막대) 렌더 + 슬라이드 네비게이션/리플레이 버튼 바인딩
 function setupReport() {
   const host = document.getElementById('report-chart');
-  if (host) host.innerHTML = buildLineChartSVG();
+  if (host) host.innerHTML = buildBarChartSVG();
 
   // 슬라이드 수 + 진행 점 생성
   reportSlides = document.querySelectorAll('#report .report-slide').length;
