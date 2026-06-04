@@ -148,17 +148,9 @@ canvas {
   margin-bottom: calc(var(--ru) * .05);
   color: #eef2fd;
 }
-.chart-bars { display: flex; align-items: flex-end; justify-content: space-between; gap: 2.5%; }
-.bar-col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; }
-.bar-val { font-size: clamp(11px, calc(var(--ru) * .024), 17px); font-weight: 700; color: #9fb2ec; margin-bottom: .5em; }
-.bar {
-  width: 64%;
-  min-height: 3px;
-  height: calc(var(--ru) * .26 * var(--barfrac, 0));   /* --barfrac = value/max (JS) */
-  background: linear-gradient(180deg, #9fb6ff, #3f63ff);
-  border-radius: 6px 6px 0 0;
-}
-.bar-label { margin-top: .6em; font-size: clamp(10px, calc(var(--ru) * .021), 15px); color: #cdd6f0; text-align: center; line-height: 1.25; }
+.chart-unit { font-weight: 400; font-size: .72em; color: #9fb2ec; }
+/* 연도별 꺾은선 그래프 (밝은 패널 위 SVG — 네이비/오렌지/민트 또렷) */
+.chart-svg { display: block; width: 100%; height: auto; }
 .chart-note { margin-top: calc(var(--ru) * .04); font-size: clamp(10px, calc(var(--ru) * .019), 13px); color: #8b9bc9; line-height: 1.55; text-align: center; }
 
 /* 본문 블록 — 텍스트 많은 슬라이드(설명·인용)는 폰에서 폰트 floor를 낮춰 화면 비율에 맞춤 */

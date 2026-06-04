@@ -930,33 +930,59 @@ function drawEndCard() {
 let reportIndex = 0;     // 현재 보고 있는 슬라이드
 let reportSlides = 0;    // 전체 슬라이드 수 (setupReport에서 DOM 기준 계산)
 
-// 그래프 데이터 — '다른 사람들로부터 고립되어 있다고 느낀 기간' (한국청소년정책연구원/KOSIS)
-// ⚠ 아래는 예시(placeholder) 수치. 실제 KOSIS 값으로 교체할 것.
+// 그래프 데이터 — '다른 사람들로부터 고립되어 있다고 느낀 기간' (한국청소년정책연구원 「아동·청소년인권실태조사」/KOSIS)
+// 표 III-6-24 실제 수치(%). 연도별(2023·2024·2025) × 기간 구간별 응답 분포(각 연도 합 100%).
+const LONELINESS_YEARS = ['2023', '2024', '2025'];
+const YEAR_COLORS = ['#04216C', '#FD953F', '#9EE7AC'];   // 2023 네이비 / 2024 오렌지 / 2025 민트 (메인 3색)
 const LONELINESS_DATA = [
-  { label: '거의 없음', value: 41 },
-  { label: '한 달 미만', value: 23 },
-  { label: '1~6개월',  value: 17 },
-  { label: '6개월~1년', value: 11 },
-  { label: '1년 이상',  value: 8 },
+  { label: '6개월<br>미만',  values: [43.6, 43.7, 40.9] },
+  { label: '6개월~<br>1년',  values: [17.5, 16.4, 17.0] },
+  { label: '1~2년',         values: [13.6, 16.9, 16.5] },
+  { label: '2~3년',         values: [9.9,  9.3,  10.8] },
+  { label: '3년<br>이상',    values: [15.4, 13.7, 14.8] },
 ];
 
-// setup()에서 1회: 그래프 막대 렌더 + 슬라이드 네비게이션/리플레이 버튼 바인딩
-function setupReport() {
-  // 그래프 막대 (높이는 CSS가 --ru·--barfrac으로 계산 → 회전/리사이즈에 자동 대응)
-  const host = document.getElementById('report-chart');
-  if (host) {
-    const maxV = Math.max(...LONELINESS_DATA.map(d => d.value));
-    host.innerHTML = '';
-    for (const d of LONELINESS_DATA) {
-      const col = document.createElement('div'); col.className = 'bar-col';
-      const val = document.createElement('div'); val.className = 'bar-val'; val.textContent = d.value + '%';
-      const bar = document.createElement('div'); bar.className = 'bar';
-      bar.style.setProperty('--barfrac', d.value / maxV);
-      const lab = document.createElement('div'); lab.className = 'bar-label'; lab.textContent = d.label;
-      col.appendChild(val); col.appendChild(bar); col.appendChild(lab);
-      host.appendChild(col);
-    }
+// 연도별 꺾은선 그래프(SVG). 네이비(#04216C)가 보이도록 밝은 패널 위에 그린다.
+function buildLineChartSVG() {
+  const D = LONELINESS_DATA, n = D.length;
+  const PL = 78, PR = 968, PT = 92, PB = 470, maxY = 50;   // 플롯 영역 + y축 최댓값(%)
+  const X = i => PL + (i / (n - 1)) * (PR - PL);
+  const Y = v => PB - (v / maxY) * (PB - PT);
+  let s = '<svg class="chart-svg" viewBox="0 0 1000 548" xmlns="http://www.w3.org/2000/svg">';
+  s += '<rect x="4" y="4" width="992" height="540" rx="16" fill="#eef1f8"/>';   // 밝은 패널
+  // y축 그리드 + 라벨
+  for (let t = 0; t <= maxY; t += 10) {
+    const y = Y(t);
+    s += `<line x1="${PL}" y1="${y}" x2="${PR}" y2="${y}" stroke="#d6dcec" stroke-width="1.5"/>`;
+    s += `<text x="${PL - 12}" y="${y + 7}" text-anchor="end" font-size="21" fill="#6b7494">${t}</text>`;
   }
+  // x축 구간 라벨 (2줄 가능)
+  for (let i = 0; i < n; i++) {
+    const parts = D[i].label.split('<br>');
+    s += `<text x="${X(i)}" y="${PB + 36}" text-anchor="middle" font-size="21" fill="#3a4068">`;
+    parts.forEach((p, k) => s += `<tspan x="${X(i)}" dy="${k === 0 ? 0 : 25}">${p}</tspan>`);
+    s += '</text>';
+  }
+  // 연도별 꺾은선 + 점
+  for (let yi = 0; yi < LONELINESS_YEARS.length; yi++) {
+    const pts = D.map((d, i) => `${X(i)},${Y(d.values[yi])}`).join(' ');
+    s += `<polyline points="${pts}" fill="none" stroke="${YEAR_COLORS[yi]}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>`;
+    D.forEach((d, i) => s += `<circle cx="${X(i)}" cy="${Y(d.values[yi])}" r="6" fill="${YEAR_COLORS[yi]}" stroke="#fff" stroke-width="2"/>`);
+  }
+  // 범례 (밝은 패널 위 → 세 색 모두 또렷)
+  let lx = PL;
+  LONELINESS_YEARS.forEach((y, yi) => {
+    s += `<rect x="${lx}" y="24" width="22" height="22" rx="4" fill="${YEAR_COLORS[yi]}"/>`;
+    s += `<text x="${lx + 30}" y="41" font-size="23" fill="#39406a">${y}</text>`;
+    lx += 138;
+  });
+  return s + '</svg>';
+}
+
+// setup()에서 1회: 그래프(연도별 꺾은선) 렌더 + 슬라이드 네비게이션/리플레이 버튼 바인딩
+function setupReport() {
+  const host = document.getElementById('report-chart');
+  if (host) host.innerHTML = buildLineChartSVG();
 
   // 슬라이드 수 + 진행 점 생성
   reportSlides = document.querySelectorAll('#report .report-slide').length;
