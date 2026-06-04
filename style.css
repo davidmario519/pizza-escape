@@ -188,6 +188,8 @@ canvas {
 #report .credits .team { font-family: 'EFMacho', sans-serif; font-size: clamp(18px, calc(var(--ru) * .034), 26px); color: #fff; margin-bottom: .3em; }
 #report .credits .names { font-size: clamp(14px, calc(var(--ru) * .026), 19px); color: #dde4f7; margin-bottom: 1.2em; }
 #report .credits .affil { font-size: clamp(12px, calc(var(--ru) * .023), 16px); color: #aab8e0; margin-bottom: .3em; }
+#report .credits .archive { margin-top: 1.2em; font-size: clamp(12px, calc(var(--ru) * .024), 16px); }
+#report .credits .archive a { color: #9fb6ff; text-decoration: none; border-bottom: 1px solid rgba(159,182,255,.5); padding-bottom: 2px; }
 
 /* 피날레: 로고 + 리플레이 버튼 */
 .finale-logo {
