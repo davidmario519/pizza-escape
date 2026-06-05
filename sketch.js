@@ -45,6 +45,7 @@ const FORWARD_PER_TAP = 0.015;
 const BOX_PENALTY = 0.5;
 const BOX_INTERVAL_MS = 2000;
 const MAX_BOX_COUNT = 8;
+const BOX_DANGER_FROM = 4;   // 박스 N개부터 '과부하 위험' 시각 피드백 시작 (붕괴=MAX_BOX_COUNT)
 
 // 둘러보기(아파트뷰) 연출
 const LOOK_BTN_BOX_MIN = 4;        // 박스 N개 이상이면 둘러보기 버튼 등장
@@ -340,6 +341,22 @@ function stepPlaying() {
   }
 }
 
+// 박스 과적 위험도 0(안전)~1(붕괴 직전). BOX_DANGER_FROM개부터 MAX_BOX_COUNT개까지 선형 상승.
+// 캐릭터 떨림·붉은 점멸·경고 테두리·HUD 색이 모두 이 값에 비례해 강해진다.
+// 라이브 메인 플레이에서만 적용 — 아파트뷰 미니 씬(brightnessOverride)·엔딩 정지 화면에선 0.
+function boxDanger() {
+  if (phase !== 'playing' || brightnessOverride != null) return 0;
+  return constrain(map(boxCount, BOX_DANGER_FROM, MAX_BOX_COUNT, 0, 1), 0, 1);
+}
+
+// 위험 점멸 세기 0~1: 위험도(진폭) × 위험할수록 빨라지는 맥박. 캐릭터·박스 붉은 틴트에 공유.
+function dangerFlash() {
+  const d = boxDanger();
+  if (d <= 0) return 0;
+  const periodMs = map(d, 0, 1, 320, 110);   // 위험할수록 점멸 주기↓(빨라짐)
+  return d * (0.5 + 0.5 * Math.sin(millis() / periodMs * TWO_PI));
+}
+
 // ---------- scene ----------
 function drawScene() {
   // 밝기 b: 기본은 진행도(playerX). 아파트뷰 미니 씬은 brightnessOverride로 방별 밝기를 지정.
@@ -363,9 +380,13 @@ function drawScene() {
 
   const px = lerp(PLAYER_RANGE_LEFT, PLAYER_RANGE_RIGHT, playerX);
   const py = floorY;
+  // 박스 과적 위험도가 높을수록 캐릭터+짐이 부들부들 떨린다(짓눌리기 직전 긴장감). 발(그림자)은 바닥에 고정.
+  const dgr = boxDanger();
+  const jx = dgr > 0 ? random(-1, 1) * dgr * 1.5 * S : 0;
+  const jy = dgr > 0 ? random(-1, 1) * dgr * 0.5 * S : 0;
   drawPlayerShadow(px, py);   // 발밑 타원 그림자 (캐릭터 아래에 깔아 접지감)
-  drawBoxStack(px, py, boxCount);   // 박스를 캐릭터보다 먼저(뒤에) — 캐릭터가 앞에 보이게
-  drawPlayer(px, py);
+  drawBoxStack(px + jx, py + jy, boxCount);   // 박스를 캐릭터보다 먼저(뒤에) — 캐릭터가 앞에 보이게
+  drawPlayer(px + jx, py + jy);
 
   drawVignette();            // 위/아래 가장자리 옅은 프레이밍 (방향성 없는 깊이감)
 }
@@ -523,8 +544,12 @@ function drawPlayer(x, y) {
   const w = h * (SPR_FW / SPR_FH);
   const top = y - h * SPR_FEET;        // 발바닥이 바닥선(y)에 닿도록 칸 아래 여백 보정
   const sx = playerFrame() * SPR_FW;   // 시트에서 잘라낼 프레임의 가로 오프셋
-  noTint();
+  // 박스 과적 위험: 위험도가 높을수록 더 빠르고 강하게 붉게 점멸한다(과부하 경고).
+  const f = dangerFlash();
+  if (f > 0.01) tint(255, 255 - f * 175, 255 - f * 175);
+  else noTint();
   image(sheet, x - w / 2, top, w, h, sx, 0, SPR_FW, SPR_FH);
+  noTint();
 }
 
 // 현재 보여줄 프레임: 0=서있기(멈춤·쉬는 중), 1~5=걷기(앞으로 탭 직후 순환)
@@ -541,6 +566,7 @@ function drawBoxStack(x, baseY, count) {
   if (count === 0) return;
   const img = IMAGES.box;
   const flash = millis() - boxFlashAt < 400;
+  const danger = dangerFlash();   // 과적 위험 붉은 점멸 (스택 전체 공유)
   const topIdx = count - 1;
   // 스프라이트 그려지는 크기(= drawPlayer와 동일) 기준으로 지게 윗면 위치 산출
   const h = PLAYER_H_U * S;
@@ -562,7 +588,9 @@ function drawBoxStack(x, baseY, count) {
     translate(rackCx + dx, cy);
     // rotate(rot);
     if (img) {
-      if (flashing) tint(255, 255, 170); else noTint();
+      if (flashing) tint(255, 255, 170);          // 새 박스 떨어질 때 노란 반짝
+      else if (danger > 0.01) tint(255, 255 - danger * 150, 255 - danger * 150);  // 과적 위험 붉은 점멸
+      else noTint();
       image(img, -bw / 2, -bh / 2, bw, bh);
       noTint();
     } else {
@@ -757,14 +785,21 @@ function drawSlideHint() {
 // ---------- HUD ----------
 function drawHUD() {
   // 지게 무게 — 우측 상단. 방 밝기가 어둡든 밝든 읽히도록 '밝은 글자 + 어두운 외곽선(halo)'.
+  const d = boxDanger();
   push();
   textAlign(RIGHT, TOP);
   textSize(14 * S);
   strokeJoin(ROUND);
   strokeWeight(3.5 * S);
   stroke(8, 10, 20, 210);     // 어두운 halo (밝은 배경에서 대비)
-  fill(247, 249, 255);        // 밝은 글자 (어두운 배경에서 대비)
-  text('지게 무게 : ' + boxCount, W - 16 * S, 14 * S);
+  // 위험도가 오르면 글자가 붉게 점멸 — 무게가 한계(MAX_BOX_COUNT)에 가까움을 알림
+  if (d > 0) {
+    const pulse = 0.5 + 0.5 * Math.sin(millis() / map(d, 0, 1, 300, 110) * TWO_PI);
+    fill(255, lerp(249, 70, d * pulse), lerp(255, 70, d * pulse));
+  } else {
+    fill(247, 249, 255);      // 밝은 글자 (어두운 배경에서 대비)
+  }
+  text('지게 무게 : ' + boxCount + ' / ' + MAX_BOX_COUNT, W - 16 * S, 14 * S);
   pop();
 }
 
