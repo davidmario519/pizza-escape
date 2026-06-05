@@ -812,6 +812,12 @@ function drawButtons() {
 //  - 혼자탈출 (win, 둘러보기 미사용) → 밝은 톤
 //  - 진엔딩   (win, 둘러보기 사용)   → 파란 톤 (연대)
 //  - 게임오버 (lose)                → 어두운 톤 (loseReason으로 멘트만 분기)
+
+// 진엔딩(둘러보기 후 클리어)만 현황·크레딧 리포트(part 3)를 띄운다.
+// 나머지 엔딩(혼자탈출·게임오버)은 탭하면 바로 다시하기.
+function isTrueEnding() {
+  return phase === 'win' && usedLookAround;
+}
 function endingContent() {
   if (phase === 'win' && !usedLookAround) {
     return {
@@ -911,12 +917,22 @@ function drawEndCard() {
 
   // 탭 안내 (우하단, 제목색으로 깜빡)
   if (millis() - endShownAt > 900) {
+    // 진엔딩이 아니면(혼자탈출·게임오버) "진짜 엔딩이 따로 있다"는 티저를 좌하단에 (재플레이 유도)
+    if (!isTrueEnding()) {
+      textFont(FONTS.macho);
+      textAlign(LEFT, BOTTOM);
+      textSize(H * 0.040);
+      fill(titleCol);
+      text('진짜 엔딩을 찾아 다시 플레이해보세요.', x0, H - H * 0.08);
+    }
+
     textFont(FONTS.macho);
     textAlign(RIGHT, BOTTOM);
     textSize(H * 0.034);
     const a = 150 + sin(millis() / 350) * 80;
     fill(red(titleCol), green(titleCol), blue(titleCol), a);
-    text('탭하여 계속  ▶', W - W * 0.08, H - H * 0.08);
+    // 진엔딩 → 현황·크레딧으로 계속 / 나머지 → 바로 다시하기
+    text(isTrueEnding() ? '탭하여 계속  ▶' : '탭하여 다시하기  ▶', W - W * 0.08, H - H * 0.08);
   }
 
   textAlign(CENTER, CENTER);  // 다른 페이즈 기본값 복원
@@ -1100,7 +1116,10 @@ function handlePress(mx, my) {
   }
   if (phase === 'countdown') return;
   if (phase === 'win' || phase === 'lose') {
-    if (millis() - endShownAt > 900) showReport();   // 엔딩 메시지 → 현황·크레딧 리포트
+    if (millis() - endShownAt > 900) {
+      if (isTrueEnding()) showReport();  // 진엔딩만 → 현황·크레딧 리포트
+      else resetGame();                  // 나머지(혼자탈출·게임오버) → 바로 다시하기
+    }
     return;
   }
   if (phase === 'zoomin') return;   // 줌인 전환 중엔 입력 무시
